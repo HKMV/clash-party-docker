@@ -1,0 +1,172 @@
+name: Docker
+
+on:
+  push:
+    branches:
+      - smart_core
+      - main
+    tags:
+      - 'v*'
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'images/**'
+      - '.github/workflows/issues.yml'
+  pull_request:
+    branches:
+      - smart_core
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build:
+    name: Build & push image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.image.outputs.name }}
+      tag: ${{ steps.image.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      # GHCR 只接受全小写仓库名，HKMV/... 需要先转小写
+      - name: Resolve image name
+        id: image
+        run: |
+          name="ghcr.io/${GITHUB_REPOSITORY,,}"
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+          echo "tag=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.image.outputs.name }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      # 多架构构建：TARGETARCH 由 buildx 按平台自动注入，prepare.mjs 据此下载对应架构内核
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+
+  # 真正跑一次镜像：确认 Web UI 能起来、Linux 内核能在容器里被拉起并返回版本号
+  smoke:
+    name: Smoke test image
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run container
+        env:
+          IMAGE: ${{ needs.build.outputs.image }}:${{ needs.build.outputs.tag }}
+        run: |
+          echo "image: $IMAGE"
+          docker run -d --name clash-party-smoke \
+            -p 8080:8080 \
+            -e CLASH_PARTY_WEBUI_PASSWORD=smoke-test \
+            -e TZ=Asia/Shanghai \
+            "$IMAGE"
+
+      - name: Wait for web UI
+        run: |
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:8080/api/health; then
+              echo
+              echo "web ui is up"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "::error::web ui did not come up"
+          docker logs clash-party-smoke
+          exit 1
+
+      - name: Verify login and renderer assets
+        run: |
+          set -eux
+          # 未登录访问首页应返回内置登录页
+          curl -fsS http://127.0.0.1:8080/ | grep -q 'Clash Party'
+          # 浏览器端 shim 必须可访问
+          curl -fsS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8080/web-shim.js | grep -q 200
+          # 错误密码应被拒绝
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8080/api/login \
+            -H 'Content-Type: application/json' -d '{"password":"wrong"}')
+          test "$code" = "401"
+          # 正确密码应签发会话
+          curl -fsS -c /tmp/cookies.txt -X POST http://127.0.0.1:8080/api/login \
+            -H 'Content-Type: application/json' -d '{"password":"smoke-test"}'
+          curl -fsS -b /tmp/cookies.txt http://127.0.0.1:8080/ | grep -q 'web-shim.js'
+
+      - name: Verify mihomo core inside container
+        run: |
+          for i in $(seq 1 30); do
+            body=$(curl -sS -b /tmp/cookies.txt -X POST http://127.0.0.1:8080/api/invoke \
+              -H 'Content-Type: application/json' \
+              -d '{"channel":"mihomoVersion","args":[]}' || true)
+            echo "$body"
+            if echo "$body" | grep -q '"version"'; then
+              echo "mihomo core is running inside the container"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "::error::mihomo core did not respond"
+          docker logs clash-party-smoke
+          exit 1
+
+      - name: Dump container logs
+        if: always()
+        run: docker logs clash-party-smoke || true
