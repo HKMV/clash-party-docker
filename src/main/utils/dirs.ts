@@ -62,6 +62,11 @@ export function exePath(): string {
 }
 
 export function resourcesDir(): string {
+  // 服务端模式：资源目录由环境变量显式指定（镜像里是 /app/extra）
+  const override = process.env.CLASH_PARTY_RESOURCES_DIR
+  if (override) {
+    return path.resolve(override)
+  }
   if (is.dev) {
     return path.join(__dirname, '../../extra')
   } else {

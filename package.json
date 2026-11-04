@@ -36,7 +36,11 @@
     "build:mac": "electron-vite build && electron-builder --publish never --mac",
     "build:mac:dev": "pnpm run prepare:dev && electron-vite build && electron-builder --publish never --mac",
     "build:linux": "electron-vite build && electron-builder --publish never --linux",
-    "build:linux:dev": "pnpm run prepare:dev && electron-vite build && electron-builder --publish never --linux"
+    "build:linux:dev": "pnpm run prepare:dev && electron-vite build && electron-builder --publish never --linux",
+    "build:web": "electron-vite build",
+    "build:server": "node -e \"require('fs').rmSync('out/server',{recursive:true,force:true})\" && vite build -c vite.config.server.ts && vite build -c vite.config.server-worker.ts && vite build -c vite.config.web-shim.ts",
+    "build:docker": "pnpm run build:web && pnpm run build:server",
+    "start:server": "node scripts/serve.mjs"
   },
   "dependencies": {
     "@electron-toolkit/utils": "^4.0.0",
@@ -58,7 +62,7 @@
     "js-yaml": "^5.5.0",
     "plist": "^5.0.0",
     "qrcode.react": "^4.2.0",
-    "sysproxy-rs": "file:src\\native\\sysproxy",
+    "sysproxy-rs": "file:src/native/sysproxy",
     "validator": "^13.15.35",
     "webdav": "^5.11.0",
     "ws": "^8.22.0",
