@@ -41,3 +41,22 @@
 - [x] 深度集成 Sub-Store，轻松管理订阅
 
 ### 安装/使用指南见 [官方文档](https://clashparty.org)
+
+### Docker 部署（服务模式）
+
+除桌面版外，本仓库还可以把同一个界面跑成容器里的 Web 服务，镜像由 GitHub Actions 自动构建并推送到 GHCR：
+
+```bash
+docker run -d --name clash-party \
+  -p 8080:8080 -p 7890:7890 \
+  -e CLASH_PARTY_WEBUI_PASSWORD='换成你的密码' \
+  -v "$PWD/data:/data" \
+  --restart unless-stopped \
+  ghcr.io/hkmv/clash-party-docker:latest
+```
+
+打开 `http://<主机>:8080` 登录即可。多架构镜像（`linux/amd64` / `linux/arm64`）、环境变量、
+数据卷、TUN 与桌面功能的差异、已知限制，详见 [docs/docker.md](docs/docker.md)。
+
+仓库内也提供了 [docker-compose.yml](docker-compose.yml) 与 [Dockerfile](Dockerfile)，
+可自行 `docker build` 或 `docker compose up -d`。
