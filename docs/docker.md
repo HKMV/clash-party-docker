@@ -37,7 +37,8 @@ docker compose logs -f                      # 看到 [web] Clash Party 服务已
 
 - `docker compose` 会自动读取同目录的 `.env`，`docker-compose.yml` 里的
   `${CLASH_PARTY_WEBUI_PASSWORD}`、`${CLASH_PARTY_TAG}`、`${CLASH_PARTY_PORT}` 都来自它。
-- `.env` 里密码留空时，容器每次启动会生成一次性密码并打印在 `docker compose logs` 里。
+- `.env` 里密码留空时，容器首次启动会自动生成密码，写入 `/data/webui-password`
+  并打印在 `docker compose logs` 里，之后一直复用（删掉该文件即可重新生成）。
 - `./data` 必须属于 uid 1000，否则容器无法写入配置（报 `EACCES`）。
 - 首次启动会生成默认配置，日志出现 `[web] Clash Party 服务已启动` 与
   `[manager] Core ready` 表示 Web UI 与内核都已就绪。
@@ -48,7 +49,7 @@ docker compose logs -f                      # 看到 [web] Clash Party 服务已
 | --------------------------------------------- | --------------------------------------------------- |
 | `docker compose up -d`                        | 启动（首次会自动拉取镜像）                          |
 | `docker compose ps`                           | 查看状态与健康检查结果                              |
-| `docker compose logs -f --tail=100`           | 跟踪日志，未设密码时在这里看一次性密码              |
+| `docker compose logs -f --tail=100`           | 跟踪日志，未设密码时在这里看自动生成的密码          |
 | `docker compose restart`                      | 重启容器（配置改动后通常不需要，Web UI 内即可生效） |
 | `docker compose pull && docker compose up -d` | 升级到新镜像，`./data` 保持不变                     |
 | `docker compose down`                         | 停止并删除容器，保留 `./data`                       |
@@ -148,8 +149,8 @@ docker run --rm -v "$PWD/data:/data" -v "$PWD:/backup" alpine \
 docker compose up -d
 ```
 
-`/data` 里包含 `storage-key`（加密敏感字段用的密钥），换机器后要保持一致，
-否则已保存的订阅密码需要重新输入。
+`/data` 里包含 `storage-key`（加密敏感字段的密钥）与 `webui-secret`（会话签名密钥），
+换机器后保持这两个文件不变，否则已保存的订阅密码需要重新输入、已登录的浏览器会掉线。
 
 ### 6. 多实例
 
@@ -232,6 +233,7 @@ echo "$GITHUB_TOKEN" | docker login ghcr.io -u <你的 GitHub 用户名> --passw
 ├── substore/              # Sub-Store 数据
 ├── traffic-usage.db       # 流量统计（node:sqlite）
 ├── webui-password         # 自动生成的登录密码
+├── webui-secret           # 会话签名密钥（保留它，重启后登录态不失效）
 └── storage-key            # safeStorage 加密密钥（加密敏感字段用）
 ```
 
