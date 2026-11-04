@@ -11,6 +11,8 @@
 
 ## 快速开始
 
+### 方式一：docker run
+
 ```bash
 docker run -d --name clash-party \
   -p 8080:8080 -p 7890:7890 \
@@ -20,14 +22,153 @@ docker run -d --name clash-party \
   ghcr.io/hkmv/clash-party-docker:latest
 ```
 
-或者用仓库里的 `docker-compose.yml`：
+### 方式二：docker compose（推荐）
 
 ```bash
-mkdir -p data && sudo chown 1000:1000 data   # 容器内以 uid 1000 运行
+cp .env.example .env                        # 按需填写密码、端口、时区
+mkdir -p data && sudo chown 1000:1000 data  # 容器内以 uid 1000 运行
 docker compose up -d
+docker compose logs -f                      # 看到 [web] Clash Party 服务已启动 即可访问
 ```
 
 打开 `http://<主机>:8080`，用密码登录即可。
+
+要点：
+
+- `docker compose` 会自动读取同目录的 `.env`，`docker-compose.yml` 里的
+  `${CLASH_PARTY_WEBUI_PASSWORD}`、`${CLASH_PARTY_TAG}`、`${CLASH_PARTY_PORT}` 都来自它。
+- `.env` 里密码留空时，容器每次启动会生成一次性密码并打印在 `docker compose logs` 里。
+- `./data` 必须属于 uid 1000，否则容器无法写入配置（报 `EACCES`）。
+- 首次启动会生成默认配置，日志出现 `[web] Clash Party 服务已启动` 与
+  `[manager] Core ready` 表示 Web UI 与内核都已就绪。
+
+## docker-compose 常用操作
+
+| 命令                                          | 说明                                                |
+| --------------------------------------------- | --------------------------------------------------- |
+| `docker compose up -d`                        | 启动（首次会自动拉取镜像）                          |
+| `docker compose ps`                           | 查看状态与健康检查结果                              |
+| `docker compose logs -f --tail=100`           | 跟踪日志，未设密码时在这里看一次性密码              |
+| `docker compose restart`                      | 重启容器（配置改动后通常不需要，Web UI 内即可生效） |
+| `docker compose pull && docker compose up -d` | 升级到新镜像，`./data` 保持不变                     |
+| `docker compose down`                         | 停止并删除容器，保留 `./data`                       |
+| `docker compose down -v`                      | 连同匿名卷一起删除，**配置会丢**，谨慎使用          |
+| `docker compose exec clash-party sh`          | 进容器排查（镜像基于 debian slim，有 sh/node）      |
+
+## compose 示例
+
+以下片段直接追加或替换到 `docker-compose.yml` 的 `clash-party` 服务里。
+
+### 1. 固定版本，避免自动跟进 latest
+
+```yaml
+services:
+  clash-party:
+    image: ghcr.io/hkmv/clash-party-docker:sha-ebd0ba8 # 或 smart_core / 1.2.3
+```
+
+### 2. 只作为局域网代理（不启用 TUN）
+
+```yaml
+services:
+  clash-party:
+    ports:
+      - '8080:8080'
+      - '7890:7890'
+```
+
+把局域网设备的 HTTP/SOCKS5 代理指向 `http://<主机>:7890`，并在 Web UI 的
+「内核设置」里打开「允许局域网连接」，否则内核只接受本机连接。
+
+### 3. TUN 网关（host 网络）
+
+```yaml
+services:
+  clash-party:
+    network_mode: host # 不要同时写 ports
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      CLASH_PARTY_WEBUI_PASSWORD: ${CLASH_PARTY_WEBUI_PASSWORD:-}
+```
+
+宿主机需要已加载 `tun` 模块（`lsmod | grep tun`）。host 网络下 Web UI 直接监听
+`8080`、混合代理监听 `7890`，无需端口映射；只有在 host 网络下 TUN 才会接管
+宿主机流量。
+
+### 4. 前面挂反向代理与 HTTPS
+
+```yaml
+services:
+  clash-party:
+    expose:
+      - '8080' # 不对外发布，交给 caddy 反代
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  caddy-data:
+  caddy-config:
+```
+
+`Caddyfile`：
+
+```caddyfile
+clash.example.com {
+  reverse_proxy clash-party:8080
+}
+```
+
+Caddy 会自动处理 WebSocket 升级；用 Nginx 时需要手动转发 `Upgrade`/`Connection` 头，
+否则流量与日志面板不会更新。反代之后建议保持登录鉴权开启，不要设置
+`CLASH_PARTY_WEBUI_AUTH=off`。
+
+### 5. 备份与还原
+
+```bash
+# 备份（容器可继续运行）
+docker run --rm -v "$PWD/data:/data:ro" -v "$PWD:/backup" alpine \
+  tar czf /backup/clash-party-$(date +%F).tar.gz -C /data .
+
+# 还原到新机器
+docker compose down
+docker run --rm -v "$PWD/data:/data" -v "$PWD:/backup" alpine \
+  tar xzf /backup/clash-party-2026-11-04.tar.gz -C /data
+docker compose up -d
+```
+
+`/data` 里包含 `storage-key`（加密敏感字段用的密钥），换机器后要保持一致，
+否则已保存的订阅密码需要重新输入。
+
+### 6. 多实例
+
+```yaml
+services:
+  clash-party-2:
+    image: ghcr.io/hkmv/clash-party-docker:latest
+    container_name: clash-party-2
+    ports:
+      - '8081:8080'
+      - '7893:7890'
+    volumes:
+      - ./data-2:/data
+    environment:
+      CLASH_PARTY_WEBUI_PASSWORD: ${CLASH_PARTY_WEBUI_PASSWORD_2:-}
+```
+
+每个实例要有独立的 `container_name`、端口与数据目录；同一台机器上不要把两个实例的
+`7890` 映射到同一个宿主机端口。
 
 ## 镜像
 

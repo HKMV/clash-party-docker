@@ -13,5 +13,6 @@ CLAUDE.md
 agent.md
 tsconfig.node.tsbuildinfo
 .data
+.env
 .openbitfun/
 /.openbitfun/search/flashgrep-index/

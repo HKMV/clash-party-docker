@@ -1,34 +1,35 @@
-# Clash Party 容器化部署示例
-# 用法：mkdir -p data && sudo chown 1000:1000 data && docker compose up -d
+# Clash Party 容器化部署
+#
+# 快速开始：
+#   cp .env.example .env      # 填入 CLASH_PARTY_WEBUI_PASSWORD
+#   mkdir -p data && sudo chown 1000:1000 data
+#   docker compose up -d
+#   打开 http://<主机>:8080
+#
+# 更多场景（固定版本、TUN 网关、反向代理 HTTPS、备份还原）见 docs/docker.md。
+
 services:
   clash-party:
-    image: ghcr.io/hkmv/clash-party-docker:latest
+    image: ghcr.io/hkmv/clash-party-docker:${CLASH_PARTY_TAG:-latest}
     container_name: clash-party
     restart: unless-stopped
     ports:
-      # Web UI（浏览器访问 http://<host>:8080）
-      - '8080:8080'
-      # 混合代理端口，HTTP/SOCKS5 共用
+      # Web UI 与 API
+      - '${CLASH_PARTY_PORT:-8080}:8080'
+      # 混合代理端口（HTTP 与 SOCKS5 共用），给局域网设备或其它容器使用
       - '7890:7890'
-      # SOCKS5（在 Web UI 内核设置中启用后生效）
-      - '7891:7891'
-      # HTTP（在 Web UI 内核设置中启用后生效）
-      - '7892:7892'
+      # 以下两个端口默认不监听，需先在 Web UI 的「内核设置」里填写端口并重启内核
+      # - '7891:7891'   # SOCKS5
+      # - '7892:7892'   # HTTP
     environment:
-      TZ: Asia/Shanghai
-      # 必改：Web UI 登录密码。留空则启动时自动生成并打印在容器日志里
-      CLASH_PARTY_WEBUI_PASSWORD: 'change-me'
-      # 设成 off 可关闭登录（仅建议在完全可信的内网使用）
+      # 未在 .env 里设置时使用默认值；密码留空则启动时自动生成并打印在日志中
+      CLASH_PARTY_WEBUI_PASSWORD: ${CLASH_PARTY_WEBUI_PASSWORD:-}
+      TZ: ${TZ:-Asia/Shanghai}
+      # 关闭 Web UI 登录（仅限完全可信的内网）
       # CLASH_PARTY_WEBUI_AUTH: 'off'
     volumes:
-      # 配置、订阅、内核工作目录、访问密码都保存在这里
+      # 配置、订阅、内核工作目录、访问密码都保存在这里，升级镜像时保留即可
       - ./data:/data
-    # TUN 模式（可选）：容器需要访问 /dev/net/tun 并具备 NET_ADMIN 能力，
-    # 且宿主机内核已加载 tun 模块。不启用 TUN 时以下配置可以删除。
-    # cap_add:
-    #   - NET_ADMIN
-    # devices:
-    #   - /dev/net/tun
     healthcheck:
       test:
         - CMD
@@ -39,3 +40,21 @@ services:
       timeout: 5s
       retries: 3
       start_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+    # ---- 可选：TUN 模式 ----
+    # 容器需要访问 /dev/net/tun 且具备 NET_ADMIN；注意 TUN 只作用于容器自己的
+    # 网络命名空间，要让局域网走它请改用下面的 host 网络模式。
+    # cap_add:
+    #   - NET_ADMIN
+    # devices:
+    #   - /dev/net/tun:/dev/net/tun
+
+    # ---- 可选：作为宿主机/局域网网关 ----
+    # 使用 host 网络后 8080/7890 直接监听宿主机，无需 ports 映射；
+    # 此时 TUN 才能真正接管宿主机流量。
+    # network_mode: host
