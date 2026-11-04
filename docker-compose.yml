@@ -1,0 +1,41 @@
+# Clash Party 容器化部署示例
+# 用法：mkdir -p data && sudo chown 1000:1000 data && docker compose up -d
+services:
+  clash-party:
+    image: ghcr.io/hkmv/clash-party-docker:latest
+    container_name: clash-party
+    restart: unless-stopped
+    ports:
+      # Web UI（浏览器访问 http://<host>:8080）
+      - '8080:8080'
+      # 混合代理端口，HTTP/SOCKS5 共用
+      - '7890:7890'
+      # SOCKS5（在 Web UI 内核设置中启用后生效）
+      - '7891:7891'
+      # HTTP（在 Web UI 内核设置中启用后生效）
+      - '7892:7892'
+    environment:
+      TZ: Asia/Shanghai
+      # 必改：Web UI 登录密码。留空则启动时自动生成并打印在容器日志里
+      CLASH_PARTY_WEBUI_PASSWORD: 'change-me'
+      # 设成 off 可关闭登录（仅建议在完全可信的内网使用）
+      # CLASH_PARTY_WEBUI_AUTH: 'off'
+    volumes:
+      # 配置、订阅、内核工作目录、访问密码都保存在这里
+      - ./data:/data
+    # TUN 模式（可选）：容器需要访问 /dev/net/tun 并具备 NET_ADMIN 能力，
+    # 且宿主机内核已加载 tun 模块。不启用 TUN 时以下配置可以删除。
+    # cap_add:
+    #   - NET_ADMIN
+    # devices:
+    #   - /dev/net/tun
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:8080/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s

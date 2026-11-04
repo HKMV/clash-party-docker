@@ -1,0 +1,32 @@
+# 依赖与构建产物（容器内会重新安装 / 重新构建）
+node_modules
+out
+extra
+.data
+
+# 版本控制与编辑器
+.git
+.gitignore
+.gitattributes
+.githooks
+.github
+.vscode
+.idea
+.openbitfun
+
+# 文档与桌面端专用资源
+docs
+images
+aur
+deploy
+*.md
+CLAUDE.md
+AGENTS.md
+
+# 本地杂项
+*.log
+*.log.*
+.env
+.env.*
+.DS_Store
+Thumbs.db
