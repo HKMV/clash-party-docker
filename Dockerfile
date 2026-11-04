@@ -10,6 +10,8 @@ RUN npm install -g pnpm@11.8.0
 # 只复制依赖清单，改动源码时可直接复用这一层缓存
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY patches ./patches
+# package.json 里 sysproxy-rs 是 file: 依赖，安装前目录必须存在
+COPY src/native/sysproxy ./src/native/sysproxy
 # --ignore-scripts：容器内不需要 Electron 二进制，也不需要 electron-builder 的原生重建。
 # 服务端构建时 electron / sysproxy-rs / electron.net 均由 src/server/shims 替换。
 RUN pnpm install --frozen-lockfile --ignore-scripts
