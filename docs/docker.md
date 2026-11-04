@@ -31,6 +31,13 @@ docker compose up -d
 
 ## 镜像
 
+GHCR 上的包首次推送后默认是私有的。要么在仓库的 Packages 页面把
+`clash-party-docker` 的可见性改成 public，要么先登录再拉取：
+
+```bash
+echo "$GITHUB_TOKEN" | docker login ghcr.io -u <你的 GitHub 用户名> --password-stdin
+```
+
 | 标签                  | 说明                     |
 | --------------------- | ------------------------ |
 | `latest`              | 默认分支最新构建         |
