@@ -12,3 +12,6 @@ party.md
 CLAUDE.md
 agent.md
 tsconfig.node.tsbuildinfo
+.data
+.openbitfun/
+/.openbitfun/search/flashgrep-index/

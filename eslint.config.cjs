@@ -6,7 +6,15 @@ const { configs } = require('@electron-toolkit/eslint-config-ts')
 
 module.exports = [
   {
-    ignores: ['**/node_modules/**', '**/dist/**', '**/out/**', '**/extra/**', '**/src/native/**']
+    ignores: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/out/**',
+      '**/extra/**',
+      '**/src/native/**',
+      // 服务端模式的本地数据目录（内核工作目录、Sub-Store 前端产物等）
+      '**/.data/**'
+    ]
   },
 
   js.configs.recommended,

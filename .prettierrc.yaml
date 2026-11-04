@@ -2,3 +2,6 @@ singleQuote: true
 semi: false
 printWidth: 100
 trailingComma: none
+# 保留各文件既有的行尾（Windows 检出为 CRLF、CI 检出为 LF），
+# 避免 format:check 因为 git core.autocrlf=true 而把整个仓库判成未格式化。
+endOfLine: auto
