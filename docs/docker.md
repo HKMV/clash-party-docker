@@ -339,3 +339,25 @@ docker exec clash-party node -e \
 - 启动日志出现 `[web] Clash Party 服务已启动` 表示 Web UI 就绪。
 - `[manager] Core ready after N attempts` 表示 mihomo 内核已被拉起。
 - 若内核起不来，先确认镜像架构与宿主机一致：`docker exec clash-party uname -m`。
+
+### 拉取阶段报 `unexpected EOF`
+
+镜像本身是完整的：GHCR 上 `latest` 的 12 个分层 blob 逐层下载后 SHA256 全部匹配，
+`linux/amd64` 与 `linux/arm64` 都齐全。`unexpected EOF` 只说明下载被截断，按顺序排查：
+
+```bash
+docker rmi ghcr.io/hkmv/clash-party-docker:latest    # 1. 清掉可能残留的半截层后重试
+docker system df                                     # 2. 解压后需要 ≈500 MB 空闲
+docker info --format '{{json .RegistryConfig.Mirrors}}'  # 3. 是否配了镜像站
+```
+
+1. **镜像站缓存截断**是最常见的原因：国内 ghcr 镜像站对分层返回不全时，docker 会以
+   `unexpected EOF` / `failed to register layer` 收场。去掉 mirror 直连，或换一个源重试。
+2. **代理要配在 daemon 上**：`docker pull` 是 dockerd 在下载，只给 shell 设
+   `HTTP_PROXY`（或 `127.0.0.1:7890`）不生效。Docker Desktop 走
+   Settings → Resources → Proxies；Linux 把代理写进 dockerd 的 systemd 环境变量。
+3. **指定架构重试**，排除平台不匹配导致的异常：
+   `docker pull --platform linux/amd64 ghcr.io/hkmv/clash-party-docker:latest`。
+4. 仍失败就用离线包兜底：在能正常拉取的机器上
+   `docker save ghcr.io/hkmv/clash-party-docker:latest | gzip > clash-party.tar.gz`，
+   拷到目标机后 `gunzip -c clash-party.tar.gz | docker load`。
