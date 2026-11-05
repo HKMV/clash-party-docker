@@ -25,13 +25,22 @@ COPY . .
 ARG TARGETARCH=amd64
 # 下载目标架构的 mihomo 内核、规则库、Sub-Store 与字体资源到 extra/
 RUN node scripts/prepare.mjs "$( [ "$TARGETARCH" = "arm64" ] && echo arm64 || echo x64 )"
+# 三个内核都是静态链接的 Go 二进制，剥掉符号表与 DWARF 后体积明显下降，运行不受影响
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends binutils \
+  && rm -rf /var/lib/apt/lists/* \
+  && strip --strip-unneeded extra/sidecar/mihomo extra/sidecar/mihomo-alpha extra/sidecar/mihomo-smart
+# BundleMRS.7z 只能由 Windows 版随附的 7za.exe 解包，容器里是死重量
+RUN rm -f extra/files/BundleMRS.7z
 # 渲染层 out/renderer + 服务端单文件 out/server + 浏览器 shim out/web
 RUN pnpm run build:docker
 
 # ---------------------------------------------------------------------------
 # 3. 运行时
 # ---------------------------------------------------------------------------
-FROM node:24-bookworm-slim AS runtime
+# Alpine：三个内核都是静态链接的 Go 二进制，服务端是纯 JS 单文件，运行时不需要 glibc。
+# 相比 bookworm-slim 少约 28MB（压缩后）。
+FROM node:24-alpine AS runtime
 ENV NODE_ENV=production \
     CLASH_PARTY_APP_ROOT=/app \
     CLASH_PARTY_DATA_DIR=/data \
@@ -40,6 +49,9 @@ ENV NODE_ENV=production \
     CLASH_PARTY_HOST=0.0.0.0 \
     CLASH_PARTY_PORT=8080
 WORKDIR /app
+
+# tzdata 让 TZ 环境变量生效；ca-certificates 供内核拉取订阅与规则集
+RUN apk add --no-cache tzdata ca-certificates
 
 COPY --chown=node:node --from=build /src/out/server ./server
 COPY --chown=node:node --from=build /src/out/renderer ./web

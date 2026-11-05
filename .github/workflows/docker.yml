@@ -120,6 +120,13 @@ jobs:
             -e TZ=Asia/Shanghai \
             "$IMAGE"
 
+      - name: Report image size
+        env:
+          IMAGE: ${{ needs.build.outputs.image }}:${{ needs.build.outputs.tag }}
+        run: |
+          bytes=$(docker image inspect --format '{{.Size}}' "$IMAGE")
+          awk -v b="$bytes" 'BEGIN { printf "image size (uncompressed): %.1f MB\n", b / 1024 / 1024 }'
+
       - name: Wait for web UI
         run: |
           for i in $(seq 1 40); do
