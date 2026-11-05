@@ -193,10 +193,10 @@ echo "$GITHUB_TOKEN" | docker login ghcr.io -u <你的 GitHub 用户名> --passw
 
 `latest` 实测（registry 里的压缩体积，也就是 `docker pull` 要下载的量）：
 
-| 架构          | 压缩后   | 层数 |
-| ------------- | -------- | ---- |
-| `linux/amd64` | 166.0 MB | 12   |
-| `linux/arm64` | 165.8 MB | 12   |
+| 架构          | 压缩后  | 层数 |
+| ------------- | ------- | ---- |
+| `linux/amd64` | ≈166 MB | 12   |
+| `linux/arm64` | ≈166 MB | 12   |
 
 体积分布（amd64，压缩后）：运行时基础镜像 ≈ 60 MB、内核与规则库 `extra/` ≈ 87 MB、前端资源 `web/` ≈ 18 MB、服务端 `server/` 与 `package.json` ≈ 1.4 MB。
 
