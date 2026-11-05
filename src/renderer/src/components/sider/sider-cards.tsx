@@ -1,4 +1,4 @@
-import { useLayoutEffect, useEffect, useState } from 'react'
+import { useLayoutEffect, useEffect, useRef, useState } from 'react'
 import {
   DndContext,
   closestCorners,
@@ -28,6 +28,7 @@ import NetworkCard from '@renderer/components/sider/network-card'
 import UsageCard from '@renderer/components/sider/usage-card'
 import { useAppConfig } from '@renderer/hooks/use-app-config'
 import { mergeSiderOrder, SIDER_CARD_ROUTES } from '@renderer/utils/sider'
+import { preloadRoute } from '@renderer/routes/route-pages'
 import { markInitialContentPartReady } from '@renderer/utils/startup'
 import { DEFAULT_SIDER_ORDER } from '../../../../shared/appConfig'
 
@@ -60,8 +61,10 @@ const SiderCards = (props: Props): React.JSX.Element => {
   const siderOrder = appConfig?.siderOrder ?? DEFAULT_SIDER_ORDER
   const lockSiderCards = appConfig?.lockSiderCards ?? false
   const [order, setOrder] = useState<SiderCardKey[]>(mergeSiderOrder(siderOrder))
-  const sensors = useSensors(useSensor(PointerSensor))
+  // 移动 6px 以上才算拖拽排序，避免手抖的点击被当成拖动（那样只会重排、不会跳转）
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
   const navigate: NavigateFunction = useNavigate()
+  const pressStart = useRef<{ x: number; y: number } | null>(null)
 
   useLayoutEffect(() => {
     markInitialContentPartReady('sider')
@@ -70,6 +73,27 @@ const SiderCards = (props: Props): React.JSX.Element => {
   useEffect(() => {
     setOrder(mergeSiderOrder(siderOrder))
   }, [siderOrder])
+
+  // 卡片里还有开关、刷新、编辑等按钮，点它们不该跳转
+  const isInteractiveTarget = (target: EventTarget | null): boolean =>
+    target instanceof HTMLElement &&
+    Boolean(
+      target.closest(
+        'button, a, input, select, textarea, [role="switch"], [role="checkbox"], [role="slider"]'
+      )
+    )
+
+  const onCardClick =
+    (key: SiderCardKey) =>
+    (event: React.MouseEvent<HTMLDivElement>): void => {
+      const start = pressStart.current
+      pressStart.current = null
+      // 拖动排序后松手也会触发 click，位移超过阈值就当成拖拽
+      if (start && Math.hypot(event.clientX - start.x, event.clientY - start.y) > 6) return
+      if (isInteractiveTarget(event.target)) return
+      const dest = SIDER_CARD_ROUTES[key]
+      if (dest) navigate(dest)
+    }
 
   const onDragEnd = async (event: DragEndEvent): Promise<void> => {
     const { active, over } = event
@@ -104,7 +128,22 @@ const SiderCards = (props: Props): React.JSX.Element => {
 
   const cards = order.map((key) => {
     const Component = componentMap[key]
-    return <Component key={key} iconOnly={iconOnly} expanded={expanded} />
+    const route = SIDER_CARD_ROUTES[key]
+    // display:contents 的包装层不参与布局，只用来接点击与悬停预加载
+    return (
+      <div
+        key={key}
+        className="contents"
+        onPointerDown={(event) => {
+          pressStart.current = { x: event.clientX, y: event.clientY }
+        }}
+        onClick={iconOnly ? undefined : onCardClick(key)}
+        onPointerEnter={() => preloadRoute(route)}
+        onFocus={() => preloadRoute(route)}
+      >
+        <Component iconOnly={iconOnly} expanded={expanded} />
+      </div>
+    )
   })
 
   if (iconOnly) {

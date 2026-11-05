@@ -20,7 +20,7 @@ import {
   Tun
 } from './route-pages'
 
-export { useDeferredRoutePreload } from './route-pages'
+export { useDeferredRoutePreload, preloadRoute } from './route-pages'
 
 const HomeRedirect: React.FC = () => {
   const { appConfig } = useAppConfig()

@@ -53,7 +53,9 @@ init().then(() => {
       <HeroUIProvider>
         <NextThemesProvider attribute="class" enableSystem defaultTheme="dark">
           <BaseErrorBoundary>
-            <HashRouter>
+            {/* 关闭路由的 startTransition：点击侧边栏后高亮与路由切换立即生效，
+                懒加载页面未就绪时由 App 的 Suspense fallback 显示加载指示器 */}
+            <HashRouter useTransitions={false}>
               <AppConfigProvider>
                 <ControledMihomoConfigProvider>
                   <ProfileConfigProvider>

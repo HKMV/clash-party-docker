@@ -2,7 +2,7 @@ import { useTheme } from 'next-themes'
 import { Suspense, lazy, useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { NavigateFunction, useLocation, useNavigate, useRoutes } from 'react-router-dom'
 import OutboundModeSwitcher from '@renderer/components/sider/outbound-mode-switcher'
-import { Button, Divider } from '@heroui/react'
+import { Button, Divider, Spinner } from '@heroui/react'
 import { IoSettings } from 'react-icons/io5'
 import routes, { useDeferredRoutePreload } from '@renderer/routes'
 import UpdaterButton from '@renderer/components/updater/updater-button'
@@ -29,6 +29,13 @@ const siderHoverCloseDelay = 400
 
 const siderCardsPromise = import('@renderer/components/sider/sider-cards')
 const SiderCards = lazy(() => siderCardsPromise)
+
+// 路由切换时右侧区域不能是一片空白，否则点下去像没反应
+const RouteLoading: React.FC = () => (
+  <div className="flex h-full w-full items-center justify-center bg-content1">
+    <Spinner size="lg" color="primary" />
+  </div>
+)
 
 const FirstContentReady: React.FC = () => {
   const { appConfig } = useAppConfig()
@@ -313,7 +320,7 @@ const App: React.FC = () => {
         style={{ width: `calc(100% - ${siderWidthValue + 1}px)` }}
         className="main relative z-0 grow h-full overflow-y-auto"
       >
-        <Suspense fallback={<div className="h-full w-full bg-content1" />}>
+        <Suspense fallback={<RouteLoading />}>
           {page}
           <FirstContentReady />
         </Suspense>

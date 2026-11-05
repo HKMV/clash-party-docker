@@ -92,6 +92,30 @@ function preloadRemainingPages(): Promise<void> {
   return remainingPagesPromise
 }
 
+const preloadByRoute: Record<string, () => Promise<unknown>> = {
+  '/network': NetworkPage.preload,
+  '/override': OverridePage.preload,
+  '/proxies': ProxiesPage.preload,
+  '/rules': RulesPage.preload,
+  '/settings': SettingsPage.preload,
+  '/profiles': ProfilesPage.preload,
+  '/logs': LogsPage.preload,
+  '/connections': ConnectionsPage.preload,
+  '/mihomo': MihomoPage.preload,
+  '/sysproxy': SysproxyPage.preload,
+  '/tun': TunPage.preload,
+  '/resources': ResourcesPage.preload,
+  '/dns': DNSPage.preload,
+  '/sniffer': SnifferPage.preload,
+  '/substore': SubStorePage.preload,
+  '/traffic': TrafficPage.preload
+}
+
+// 鼠标移到侧边栏卡片上时就开始下载对应页面的 chunk，点下去通常已经是热路径
+export function preloadRoute(path: string): void {
+  void preloadByRoute[path]?.().catch(() => {})
+}
+
 export function useDeferredRoutePreload(): void {
   useEffect(() => {
     let startTimer: number | undefined
