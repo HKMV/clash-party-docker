@@ -49,7 +49,7 @@ RUN pnpm run build:docker
 # 3. 运行时
 # ---------------------------------------------------------------------------
 # Alpine：三个内核都是静态链接的 Go 二进制，服务端是纯 JS 单文件，运行时不需要 glibc。
-# 相比 bookworm-slim 少约 28MB（压缩后）。
+# 相比 bookworm-slim 少约 16MB（压缩后）。
 FROM node:24-alpine AS runtime
 ENV NODE_ENV=production \
     CLASH_PARTY_APP_ROOT=/app \

@@ -89,6 +89,7 @@ docker run -d --name clash-party \
 
 - 镜像标签：`latest`（默认分支）、`smart_core` / `main`（分支）、`sha-<短哈希>`（单次提交）、`v1.2.3`（标签构建）
 - 多架构：`linux/amd64`、`linux/arm64`
+- 体积：压缩后约 166 MB（含三个内核、规则库与前端资源），压不动的部分和可选的瘦身手段见 [docs/docker.md](docs/docker.md#镜像体积)
 - 端口：`8080` Web UI、`7890` 混合代理、`7891` SOCKS5、`7892` HTTP（后两者需在内核设置里开启）
 
 完整的 compose 用法与示例（固定版本、局域网代理、TUN 网关、反向代理 HTTPS、备份还原、多实例）、
