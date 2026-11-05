@@ -25,11 +25,21 @@ COPY . .
 ARG TARGETARCH=amd64
 # 下载目标架构的 mihomo 内核、规则库、Sub-Store 与字体资源到 extra/
 RUN node scripts/prepare.mjs "$( [ "$TARGETARCH" = "arm64" ] && echo arm64 || echo x64 )"
-# 三个内核都是静态链接的 Go 二进制，剥掉符号表与 DWARF 后体积明显下降，运行不受影响
+# 三个内核都是静态链接的 Go 二进制，剥掉符号表与 DWARF 后体积明显下降，运行不受影响。
+# arm64 的内核要用 aarch64 交叉 binutils 处理，amd64 用自带的 strip；失败不阻断构建，只记日志。
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends binutils \
-  && rm -rf /var/lib/apt/lists/* \
-  && strip --strip-unneeded extra/sidecar/mihomo extra/sidecar/mihomo-alpha extra/sidecar/mihomo-smart
+  && apt-get install -y --no-install-recommends binutils binutils-aarch64-linux-gnu \
+  && rm -rf /var/lib/apt/lists/*
+RUN STRIP="$( [ "$TARGETARCH" = "arm64" ] && echo aarch64-linux-gnu-strip || echo strip )"; \
+  for f in extra/sidecar/mihomo extra/sidecar/mihomo-alpha extra/sidecar/mihomo-smart; do \
+    before=$(stat -c%s "$f"); \
+    if $STRIP --strip-unneeded "$f"; then \
+      after=$(stat -c%s "$f"); \
+      echo "strip $f: $((before / 1024 / 1024))MB -> $((after / 1024 / 1024))MB"; \
+    else \
+      echo "WARN: strip failed for $f, keeping original"; \
+    fi; \
+  done
 # BundleMRS.7z 只能由 Windows 版随附的 7za.exe 解包，容器里是死重量
 RUN rm -f extra/files/BundleMRS.7z
 # 渲染层 out/renderer + 服务端单文件 out/server + 浏览器 shim out/web
