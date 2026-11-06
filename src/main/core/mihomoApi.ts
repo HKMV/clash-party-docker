@@ -71,6 +71,11 @@ function disposeStreamSocket(ws: WebSocket): void {
   ws.onclose = null
   ws.onerror = null
   ws.removeAllListeners()
+  // ws 库在 CONNECTING 阶段被 terminate/close 会 emit 'error'
+  // （"WebSocket was closed before the connection was established"）。
+  // 这里业务监听已全部移除，必须补一个兜底监听，否则该事件无人处理，
+  // Node 进程会直接崩溃（Web 服务模式下表现为切换订阅时整个服务挂掉）。
+  ws.onerror = (): void => {}
 
   if (ws.readyState === WebSocket.OPEN) {
     ws.close()
