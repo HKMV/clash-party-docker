@@ -878,5 +878,9 @@
   "profiles.editInfo.source.group": "مجموعه پروکسی",
   "profiles.editInfo.source.nodes": "گره‌های جداگانه",
   "profiles.saveDraft": "ذخیره پیش‌نویس",
-  "profiles.publish": "انتشار"
+  "profiles.publish": "انتشار",
+  "profiles.localSourceBadge": "منبع پیکربندی محلی",
+  "profiles.localSourceHint": "این پروفایل به‌عنوان منبع گره پیکربندی محلی استفاده می‌شود و تغییر آن غیرفعال است. برای استفاده مستقیم، آن را از منوی کارت جدا کنید.",
+  "profiles.unlinkLocalSource": "جداسازی از پیکربندی محلی",
+  "profiles.localSourceUnlinked": "جدا شد. این پروفایل اکنون پروفایل عادی است."
 }

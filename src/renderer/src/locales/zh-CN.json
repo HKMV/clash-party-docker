@@ -901,5 +901,9 @@
   "profiles.editInfo.source.group": "代理集合",
   "profiles.editInfo.source.nodes": "独立节点",
   "profiles.saveDraft": "保存草稿",
-  "profiles.publish": "发布"
+  "profiles.publish": "发布",
+  "profiles.localSourceBadge": "本地配置源",
+  "profiles.localSourceHint": "该订阅已作为「本地配置」的节点源引用，点击切换不会生效；如需直接使用，请先在菜单中解除引用",
+  "profiles.unlinkLocalSource": "解除本地配置引用",
+  "profiles.localSourceUnlinked": "已解除引用，该订阅恢复为普通订阅"
 }

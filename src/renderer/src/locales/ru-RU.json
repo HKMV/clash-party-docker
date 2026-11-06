@@ -884,5 +884,9 @@
   "profiles.editInfo.source.group": "Прокси-провайдер",
   "profiles.editInfo.source.nodes": "Отдельные узлы",
   "profiles.saveDraft": "Сохранить черновик",
-  "profiles.publish": "Опубликовать"
+  "profiles.publish": "Опубликовать",
+  "profiles.localSourceBadge": "Источник локальной конфигурации",
+  "profiles.localSourceHint": "Этот профиль используется как источник узлов локальной конфигурации, переключение отключено. Отвяжите его через меню карточки, чтобы использовать напрямую.",
+  "profiles.unlinkLocalSource": "Отвязать от локальной конфигурации",
+  "profiles.localSourceUnlinked": "Отвязано. Профиль снова обычный."
 }

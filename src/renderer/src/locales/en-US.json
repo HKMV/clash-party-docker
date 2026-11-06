@@ -901,5 +901,9 @@
   "profiles.editInfo.source.group": "Proxy Provider",
   "profiles.editInfo.source.nodes": "Individual Nodes",
   "profiles.saveDraft": "Save Draft",
-  "profiles.publish": "Publish"
+  "profiles.publish": "Publish",
+  "profiles.localSourceBadge": "Local Source",
+  "profiles.localSourceHint": "This profile is referenced as a node source of the Local Config, so switching is disabled. Unlink it from the card menu to use it directly.",
+  "profiles.unlinkLocalSource": "Unlink from Local Config",
+  "profiles.localSourceUnlinked": "Unlinked. This profile is now a normal profile."
 }

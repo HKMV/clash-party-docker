@@ -10,11 +10,12 @@ import type { ReactNode } from 'react'
 interface Props {
   info: Pick<IProfileItem, 'name' | 'type' | 'updated' | 'extra'>
   isCurrent?: boolean
+  isSource?: boolean
   actions: ReactNode
 }
 
 const ProfileCardContent: React.FC<Props> = (props) => {
-  const { info, isCurrent = false, actions } = props
+  const { info, isCurrent = false, isSource = false, actions } = props
   const { t } = useTranslation()
   const { appConfig, patchAppConfig } = useAppConfig()
   const { profileDisplayDate = 'expire' } = appConfig || {}
@@ -73,7 +74,7 @@ const ProfileCardContent: React.FC<Props> = (props) => {
         )}
       </CardBody>
       <CardFooter className="pt-0">
-        {typeChip && (
+        {(typeChip || isSource) && (
           <div
             className={`w-full mt-2 flex justify-between items-center ${isCurrent ? 'text-primary-foreground' : 'text-foreground'}`}
           >
@@ -85,6 +86,16 @@ const ProfileCardContent: React.FC<Props> = (props) => {
                   className={`${isCurrent ? 'text-primary-foreground border-primary-foreground' : 'border-primary text-primary'}`}
                 >
                   {typeChip}
+                </Chip>
+              )}
+              {isSource && (
+                <Chip
+                  size="sm"
+                  variant="flat"
+                  color="secondary"
+                  title={t('profiles.localSourceHint')}
+                >
+                  {t('profiles.localSourceBadge')}
                 </Chip>
               )}
             </div>

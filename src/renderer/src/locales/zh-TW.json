@@ -901,5 +901,9 @@
   "profiles.editInfo.source.group": "代理集合",
   "profiles.editInfo.source.nodes": "獨立節點",
   "profiles.saveDraft": "儲存草稿",
-  "profiles.publish": "發布"
+  "profiles.publish": "發布",
+  "profiles.localSourceBadge": "本機設定來源",
+  "profiles.localSourceHint": "此訂閱已作為「本機設定」的節點來源引用，點擊切換不會生效；如需直接使用，請先在選單中解除引用",
+  "profiles.unlinkLocalSource": "解除本機設定引用",
+  "profiles.localSourceUnlinked": "已解除引用，此訂閱恢復為普通訂閱"
 }

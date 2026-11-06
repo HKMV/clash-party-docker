@@ -14,9 +14,18 @@ import {
 import { IoMdMore, IoMdRefresh } from 'react-icons/io'
 import dayjs from '@renderer/utils/dayjs'
 import React, { Key, useMemo, useState } from 'react'
+import { useSWRConfig } from 'swr'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { exportLocalConfig, openFile, updatePluginProfile } from '@renderer/utils/ipc'
+import {
+  exportLocalConfig,
+  getLocalConfig,
+  openFile,
+  removeLocalSource,
+  saveLocalDraft,
+  updatePluginProfile
+} from '@renderer/utils/ipc'
+import { parse, stringify } from 'yaml'
 import { toast } from '@renderer/components/base/toast'
 import { useProfileConfig } from '@renderer/hooks/use-profile-config'
 import { useTranslation } from 'react-i18next'
@@ -49,6 +58,7 @@ interface MenuItem {
 }
 const ProfileItem: React.FC<Props> = (props) => {
   const { t } = useTranslation()
+  const { mutate } = useSWRConfig()
   const { changeCurrentProfile } = useProfileConfig()
   const {
     info,
@@ -158,6 +168,15 @@ const ProfileItem: React.FC<Props> = (props) => {
         }
       )
     }
+    if (isSource) {
+      list.push({
+        key: 'unlink-local-source',
+        label: t('profiles.unlinkLocalSource'),
+        showDivider: false,
+        color: 'default',
+        className: ''
+      })
+    }
     return isSource ? list.filter((item) => item.key !== 'edit-tunnels') : list
   }, [info, t, isSource])
 
@@ -206,6 +225,65 @@ const ProfileItem: React.FC<Props> = (props) => {
         } catch (error) {
           toast.error(String(error))
         }
+        break
+      }
+      case 'unlink-local-source': {
+        try {
+          const state = await getLocalConfig()
+          const source = state.draft.sources.find((candidate) => candidate.profileId === info.id)
+          if (source) await removeLocalSource(source.id)
+          // removeLocalSource 只删 sources 链接，且源提交后可能已转成模块条目
+          // （sources 为空）；这里按名称/URL 前缀把残留的 provider / 节点一并清理，
+          // 否则卡片会一直被判定为"源"而无法恢复切换
+          const next = await getLocalConfig()
+          const sourceName = source?.name ?? info.name
+          const providers = parse(next.draft.modules['proxy-providers'])
+          const providersTouched = (() => {
+            if (!providers || typeof providers !== 'object' || Array.isArray(providers)) {
+              return false
+            }
+            let removed = false
+            for (const [name, value] of Object.entries(providers)) {
+              const sameName = name === sourceName
+              const sameUrl = Boolean(info.url) && (value as { url?: unknown })?.url === info.url
+              if (sameName || sameUrl) {
+                delete providers[name]
+                removed = true
+              }
+            }
+            if (removed) {
+              next.draft.modules['proxy-providers'] = stringify(providers)
+            }
+            return removed
+          })()
+          const prefix = `[${sourceName}] `
+          const proxies = parse(next.draft.modules.proxies)
+          const proxiesTouched = (() => {
+            if (!Array.isArray(proxies)) return false
+            const filtered = proxies.filter(
+              (node) =>
+                !(
+                  node &&
+                  typeof node === 'object' &&
+                  typeof (node as { name?: unknown }).name === 'string' &&
+                  ((node as { name: string }).name === prefix ||
+                    (node as { name: string }).name.startsWith(prefix))
+                )
+            )
+            if (filtered.length === proxies.length) return false
+            next.draft.modules.proxies = stringify(filtered)
+            return true
+          })()
+          if (providersTouched || proxiesTouched) {
+            await saveLocalDraft(next.draft)
+          }
+          toast.success(t('profiles.localSourceUnlinked'))
+        } catch (error) {
+          toast.error(String(error))
+          break
+        }
+        await mutate('getLocalConfig')
+        mutateProfileConfig()
         break
       }
     }
@@ -329,6 +407,7 @@ const ProfileItem: React.FC<Props> = (props) => {
           <ProfileCardContent
             info={info}
             isCurrent={isCurrent}
+            isSource={isSource}
             actions={
               <div className="flex">
                 {(info.type === 'remote' || info.pluginId) && (

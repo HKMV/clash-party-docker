@@ -80,8 +80,13 @@ const Profiles: React.FC = () => {
   const { data: localConfig } = useSWR('getLocalConfig', getLocalConfig)
   const localSourceIds = useMemo(
     () =>
-      new Set(
-        items
+      new Set<string>([
+        // 已被本地配置显式引用的订阅（与编辑信息弹窗的 asSource 判定同口径）
+        ...(localConfig?.draft?.sources ?? [])
+          .map((source) => source.profileId)
+          .filter((id): id is string => Boolean(id)),
+        // 本地配置模块里按名称 / URL 引用的订阅
+        ...items
           .filter((item) => {
             if (!localConfig) return false
             const providers = parse(localConfig.draft.modules['proxy-providers'])
@@ -113,7 +118,7 @@ const Profiles: React.FC = () => {
             return Boolean(isProviderSource || isNodeSource)
           })
           .map((item) => item.id)
-      ),
+      ]),
     [items, localConfig]
   )
   const [showPluginImport, setShowPluginImport] = useState(false)
@@ -575,7 +580,10 @@ const Profiles: React.FC = () => {
                 info={item}
                 onPress={
                   localSourceIds.has(item.id)
-                    ? undefined
+                    ? async () => {
+                        // 源订阅不能作为当前配置，点击只做说明，避免"点了没反应"
+                        toast.warning(t('profiles.localSourceHint'))
+                      }
                     : async () => {
                         await changeCurrentProfile(item.id)
                       }
