@@ -1,6 +1,7 @@
 import { Navigate } from 'react-router-dom'
 import { useAppConfig } from '@renderer/hooks/use-app-config'
 import { getSiderCardRoute } from '@renderer/utils/sider'
+import { isWebMode } from '@renderer/utils/web'
 import {
   Connections,
   DNS,
@@ -22,6 +23,14 @@ import {
 
 export { useDeferredRoutePreload, preloadRoute } from './route-pages'
 
+// Web 服务模式下系统代理设置没有意义：它只会改容器所在宿主机的代理，而不是访问者的设备。
+// 保留路径并重定向，避免旧书签 / 旧 siderOrder 落到空页面。
+const sysproxyElement: React.ReactNode = isWebMode ? (
+  <Navigate to="/network" replace />
+) : (
+  <Sysproxy />
+)
+
 const HomeRedirect: React.FC = () => {
   const { appConfig } = useAppConfig()
 
@@ -41,7 +50,7 @@ const routes = [
   },
   {
     path: '/sysproxy',
-    element: <Sysproxy />
+    element: sysproxyElement
   },
   {
     path: '/tun',

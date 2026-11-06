@@ -14,6 +14,7 @@ import { IoIosHelpCircle } from 'react-icons/io'
 import { getDriver } from '@renderer/App'
 import { useTranslation } from 'react-i18next'
 import { useAppConfig } from '@renderer/hooks/use-app-config'
+import { isWebMode } from '@renderer/utils/web'
 import UpdaterModal from '../updater/updater-modal'
 import SettingItem from '../base/base-setting-item'
 import SettingCard from '../base/base-setting-card'
@@ -55,38 +56,42 @@ const Actions: React.FC = () => {
             {t('actions.guide.button')}
           </Button>
         </SettingItem>
-        <SettingItem title={t('actions.update.title')} divider>
-          <Button
-            size="sm"
-            isLoading={checkingUpdate}
-            onPress={async () => {
-              try {
-                setCheckingUpdate(true)
-                const version = await checkUpdate()
-                if (version) {
-                  const canSilentlyUpdate = platform === 'win32' || platform === 'darwin'
-                  if (appConfig?.silentUpdate !== false && canSilentlyUpdate) {
-                    await downloadAndInstallUpdate(version.version)
+        {/* 应用内更新下载的是桌面安装包，容器里应该 docker pull；轻量模式与退出
+            则会停掉/杀死整个服务进程，都不能在 Web 模式下出现 */}
+        {!isWebMode && (
+          <SettingItem title={t('actions.update.title')} divider>
+            <Button
+              size="sm"
+              isLoading={checkingUpdate}
+              onPress={async () => {
+                try {
+                  setCheckingUpdate(true)
+                  const version = await checkUpdate()
+                  if (version) {
+                    const canSilentlyUpdate = platform === 'win32' || platform === 'darwin'
+                    if (appConfig?.silentUpdate !== false && canSilentlyUpdate) {
+                      await downloadAndInstallUpdate(version.version)
+                    } else {
+                      setNewVersion(version.version)
+                      setChangelog(version.changelog)
+                      setOpenUpdate(true)
+                    }
                   } else {
-                    setNewVersion(version.version)
-                    setChangelog(version.changelog)
-                    setOpenUpdate(true)
+                    new window.Notification(t('actions.update.upToDate.title'), {
+                      body: t('actions.update.upToDate.body')
+                    })
                   }
-                } else {
-                  new window.Notification(t('actions.update.upToDate.title'), {
-                    body: t('actions.update.upToDate.body')
-                  })
+                } catch (e) {
+                  toast.error(String(e))
+                } finally {
+                  setCheckingUpdate(false)
                 }
-              } catch (e) {
-                toast.error(String(e))
-              } finally {
-                setCheckingUpdate(false)
-              }
-            }}
-          >
-            {t('actions.update.button')}
-          </Button>
-        </SettingItem>
+              }}
+            >
+              {t('actions.update.button')}
+            </Button>
+          </SettingItem>
+        )}
         <SettingItem
           title={t('actions.reset.title')}
           actions={
@@ -117,26 +122,30 @@ const Actions: React.FC = () => {
             {t('actions.heapSnapshot.button')}
           </Button>
         </SettingItem>
-        <SettingItem
-          title={t('actions.lightMode.title')}
-          actions={
-            <Tooltip content={t('actions.lightMode.tooltip')}>
-              <Button isIconOnly size="sm" variant="light">
-                <IoIosHelpCircle className="text-lg" />
-              </Button>
-            </Tooltip>
-          }
-          divider
-        >
-          <Button size="sm" onPress={quitWithoutCore}>
-            {t('actions.lightMode.button')}
-          </Button>
-        </SettingItem>
-        <SettingItem title={t('actions.quit.title')} divider>
-          <Button size="sm" onPress={quitApp}>
-            {t('actions.quit.button')}
-          </Button>
-        </SettingItem>
+        {!isWebMode && (
+          <SettingItem
+            title={t('actions.lightMode.title')}
+            actions={
+              <Tooltip content={t('actions.lightMode.tooltip')}>
+                <Button isIconOnly size="sm" variant="light">
+                  <IoIosHelpCircle className="text-lg" />
+                </Button>
+              </Tooltip>
+            }
+            divider
+          >
+            <Button size="sm" onPress={quitWithoutCore}>
+              {t('actions.lightMode.button')}
+            </Button>
+          </SettingItem>
+        )}
+        {!isWebMode && (
+          <SettingItem title={t('actions.quit.title')} divider>
+            <Button size="sm" onPress={quitApp}>
+              {t('actions.quit.button')}
+            </Button>
+          </SettingItem>
+        )}
         <SettingItem title={t('actions.version.title')}>
           <div>v{version}</div>
         </SettingItem>

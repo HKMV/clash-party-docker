@@ -11,6 +11,7 @@ import { FaTelegramPlane } from 'react-icons/fa'
 import SiderConfig from '@renderer/components/settings/sider-config'
 import SubStoreConfig from '@renderer/components/settings/substore-config'
 import LocalBackupConfig from '@renderer/components/settings/local-backup-config'
+import { isWebMode } from '@renderer/utils/web'
 import { useTranslation } from 'react-i18next'
 
 const Settings: React.FC = () => {
@@ -65,7 +66,8 @@ const Settings: React.FC = () => {
       <SiderConfig />
       <WebdavConfig />
       <MihomoConfig />
-      <ShortcutConfig />
+      {/* 全局快捷键依赖桌面端的 globalShortcut，浏览器里注册了也不会触发 */}
+      {!isWebMode && <ShortcutConfig />}
       <LocalBackupConfig />
       <Actions />
     </BasePage>

@@ -1,6 +1,17 @@
 import { DEFAULT_SIDER_ORDER } from '../../../shared/appConfig'
+import { isWebMode } from './web'
 
-export const SIDER_CARD_KEYS: SiderCardKey[] = DEFAULT_SIDER_ORDER
+/** Web 服务模式下没有意义的卡片：系统代理改的是运行容器的宿主机，而不是访问者的设备 */
+const DESKTOP_ONLY_SIDER_CARDS: SiderCardKey[] = ['sysproxy']
+
+export { DESKTOP_ONLY_SIDER_CARDS }
+
+const availableSiderCards = (): SiderCardKey[] =>
+  isWebMode
+    ? DEFAULT_SIDER_ORDER.filter((key) => !DESKTOP_ONLY_SIDER_CARDS.includes(key))
+    : DEFAULT_SIDER_ORDER
+
+export const SIDER_CARD_KEYS: SiderCardKey[] = availableSiderCards()
 
 export const SIDER_CARD_ROUTES: Record<SiderCardKey, string> = {
   sysproxy: '/sysproxy',

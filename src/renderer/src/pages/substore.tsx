@@ -12,6 +12,7 @@ import {
   downloadSubStore
 } from '@renderer/utils/ipc'
 import React, { useEffect, useState } from 'react'
+import { isWebMode } from '@renderer/utils/web'
 import { HiExternalLink } from 'react-icons/hi'
 import { useTranslation } from 'react-i18next'
 import { IoMdCloudDownload } from 'react-icons/io'
@@ -25,10 +26,7 @@ const SubStore: React.FC = () => {
   const [isUpdating, setIsUpdating] = useState(false)
   // 浏览器里 Sub-Store 的前后端都由 Web 服务同源代理（/substore、/substore/api），
   // 直接写 127.0.0.1 只会指向用户自己的机器。桌面版仍然直连本机端口。
-  const webShimInstalled = Boolean(
-    (window as unknown as { __clashPartyWebShimInstalled?: boolean }).__clashPartyWebShimInstalled
-  )
-  const webOrigin = webShimInstalled ? window.location.origin : ''
+  const webOrigin = isWebMode ? window.location.origin : ''
   const frontendUrl = useCustomSubStore
     ? ''
     : webOrigin

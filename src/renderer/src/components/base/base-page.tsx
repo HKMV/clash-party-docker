@@ -1,6 +1,7 @@
 import { Button, Divider } from '@heroui/react'
 import { useAppConfig } from '@renderer/hooks/use-app-config'
 import { platform } from '@renderer/utils/init'
+import { isWebMode } from '@renderer/utils/web'
 import { isAlwaysOnTop, setAlwaysOnTop } from '@renderer/utils/ipc'
 import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { RiPushpin2Fill, RiPushpin2Line } from 'react-icons/ri'
@@ -64,25 +65,28 @@ const BasePage = forwardRef<HTMLDivElement, Props>((props, ref) => {
           </div>
           <div style={{ marginRight: overlayWidth }} className="header flex gap-1 h-full">
             {props.header}
-            <Button
-              size="sm"
-              className="app-nodrag"
-              isIconOnly
-              title={t('common.pinWindow')}
-              variant="light"
-              color={onTop ? 'primary' : 'default'}
-              onPress={async () => {
-                await setAlwaysOnTop(!onTop)
-                await updateAlwaysOnTop()
-              }}
-              startContent={
-                onTop ? (
-                  <RiPushpin2Fill className="text-lg" />
-                ) : (
-                  <RiPushpin2Line className="text-lg" />
-                )
-              }
-            />
+            {/* 窗口置顶是桌面端能力，浏览器里点了没有效果 */}
+            {!isWebMode && (
+              <Button
+                size="sm"
+                className="app-nodrag"
+                isIconOnly
+                title={t('common.pinWindow')}
+                variant="light"
+                color={onTop ? 'primary' : 'default'}
+                onPress={async () => {
+                  await setAlwaysOnTop(!onTop)
+                  await updateAlwaysOnTop()
+                }}
+                startContent={
+                  onTop ? (
+                    <RiPushpin2Fill className="text-lg" />
+                  ) : (
+                    <RiPushpin2Line className="text-lg" />
+                  )
+                }
+              />
+            )}
           </div>
         </div>
 

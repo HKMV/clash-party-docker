@@ -1,6 +1,8 @@
 import SettingCard from '@renderer/components/base/base-setting-card'
 import SettingItem from '@renderer/components/base/base-setting-item'
 import { useAppConfig } from '@renderer/hooks/use-app-config'
+import { DESKTOP_ONLY_SIDER_CARDS } from '@renderer/utils/sider'
+import { isWebMode } from '@renderer/utils/web'
 import { Radio, RadioGroup } from '@heroui/react'
 import { useTranslation } from 'react-i18next'
 import type { FC } from 'react'
@@ -51,7 +53,9 @@ const SiderConfig: FC = () => {
     usageCardStatus: appConfig?.usageCardStatus || 'col-span-1'
   }
 
-  const cardStatusEntries = Object.entries(cardStatus)
+  const cardStatusEntries = Object.entries(cardStatus).filter(
+    ([key]) => !isWebMode || !DESKTOP_ONLY_SIDER_CARDS.some((card) => key === `${card}CardStatus`)
+  )
 
   return (
     <SettingCard title={t('sider.title')}>

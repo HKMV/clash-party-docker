@@ -7,6 +7,7 @@ import { IoSettings } from 'react-icons/io5'
 import routes, { useDeferredRoutePreload } from '@renderer/routes'
 import UpdaterButton from '@renderer/components/updater/updater-button'
 import { useAppConfig } from '@renderer/hooks/use-app-config'
+import { isWebMode } from '@renderer/utils/web'
 import { applyTheme, setNativeTheme, setTitleBarOverlay } from '@renderer/utils/ipc'
 import { platform } from '@renderer/utils/init'
 import { TitleBarOverlayOptions } from 'electron'
@@ -247,9 +248,12 @@ const App: React.FC = () => {
               <SiderCards iconOnly expanded={siderExpandedOnHover} />
             </Suspense>
             <div className="pt-2 pb-4 flex shrink-0 flex-col space-y-2">
-              <div className="flex justify-center">
-                <UpdaterButton iconOnly />
-              </div>
+              {/* 应用内更新下载的是桌面安装包，容器里应使用 docker pull */}
+              {!isWebMode && (
+                <div className="flex justify-center">
+                  <UpdaterButton iconOnly />
+                </div>
+              )}
               <div className="px-2 flex justify-center">
                 <OutboundModeSwitcher iconOnly expanded={siderExpandedOnHover} />
               </div>
@@ -275,7 +279,7 @@ const App: React.FC = () => {
                   <MihomoIcon className="h-8 leading-8 text-lg mx-px" />
                   <h3 className="text-lg font-bold leading-8">Clash Party</h3>
                 </div>
-                <UpdaterButton />
+                {!isWebMode && <UpdaterButton />}
                 <Button
                   size="sm"
                   className="app-nodrag"

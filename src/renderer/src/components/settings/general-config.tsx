@@ -12,6 +12,7 @@ import {
   Tooltip
 } from '@heroui/react'
 import { BiCopy, BiSolidFileImport } from 'react-icons/bi'
+import { isWebMode } from '@renderer/utils/web'
 import useSWR from 'swr'
 import {
   applyTheme,
@@ -290,34 +291,38 @@ const GeneralConfig: React.FC = () => {
             <SelectItem key="fa-IR">فارسی</SelectItem>
           </Select>
         </SettingItem>
-        <SettingItem title={t('settings.autoStart')} divider>
-          <Switch
-            size="sm"
-            isSelected={enable}
-            onValueChange={async (v) => {
-              try {
-                // 检查管理员权限
-                const hasAdminPrivileges =
-                  await window.electron.ipcRenderer.invoke('checkAdminPrivileges')
+        {/* 以下都是桌面端专属能力：开机自启、应用内更新、悬浮窗、托盘、窗口框架、
+            硬件加速（会重启进程）。容器里要么无意义，要么会误杀服务进程。 */}
+        {!isWebMode && (
+          <SettingItem title={t('settings.autoStart')} divider>
+            <Switch
+              size="sm"
+              isSelected={enable}
+              onValueChange={async (v) => {
+                try {
+                  // 检查管理员权限
+                  const hasAdminPrivileges =
+                    await window.electron.ipcRenderer.invoke('checkAdminPrivileges')
 
-                if (!hasAdminPrivileges) {
-                  const notification = new Notification(t('settings.autoStart.permissions'))
-                  notification.close()
-                }
+                  if (!hasAdminPrivileges) {
+                    const notification = new Notification(t('settings.autoStart.permissions'))
+                    notification.close()
+                  }
 
-                if (v) {
-                  await enableAutoRun()
-                } else {
-                  await disableAutoRun()
+                  if (v) {
+                    await enableAutoRun()
+                  } else {
+                    await disableAutoRun()
+                  }
+                } catch (e) {
+                  toast.error(String(e))
+                } finally {
+                  mutateEnable()
                 }
-              } catch (e) {
-                toast.error(String(e))
-              } finally {
-                mutateEnable()
-              }
-            }}
-          />
-        </SettingItem>
+              }}
+            />
+          </SettingItem>
+        )}
         <SettingItem title={t('settings.autoUpdateProfileOnStart')} divider>
           <Switch
             size="sm"
@@ -327,24 +332,28 @@ const GeneralConfig: React.FC = () => {
             }}
           />
         </SettingItem>
-        <SettingItem title={t('settings.autoCheckUpdate')} divider>
-          <Switch
-            size="sm"
-            isSelected={autoCheckUpdate}
-            onValueChange={(v) => {
-              patchAppConfig({ autoCheckUpdate: v })
-            }}
-          />
-        </SettingItem>
-        <SettingItem title={t('settings.silentUpdate')} divider>
-          <Switch
-            size="sm"
-            isSelected={silentUpdate}
-            onValueChange={(v) => {
-              patchAppConfig({ silentUpdate: v })
-            }}
-          />
-        </SettingItem>
+        {!isWebMode && (
+          <>
+            <SettingItem title={t('settings.autoCheckUpdate')} divider>
+              <Switch
+                size="sm"
+                isSelected={autoCheckUpdate}
+                onValueChange={(v) => {
+                  patchAppConfig({ autoCheckUpdate: v })
+                }}
+              />
+            </SettingItem>
+            <SettingItem title={t('settings.silentUpdate')} divider>
+              <Switch
+                size="sm"
+                isSelected={silentUpdate}
+                onValueChange={(v) => {
+                  patchAppConfig({ silentUpdate: v })
+                }}
+              />
+            </SettingItem>
+          </>
+        )}
         <SettingItem title={t('settings.githubProxy')} divider>
           <Select
             classNames={{ trigger: 'data-[hover=true]:bg-default-200' }}
@@ -380,77 +389,81 @@ const GeneralConfig: React.FC = () => {
             />
           </SettingItem>
         )}
-        <SettingItem title={t('settings.silentStart')} divider>
-          <Switch
-            size="sm"
-            isSelected={silentStart}
-            onValueChange={(v) => {
-              patchAppConfig({ silentStart: v })
-            }}
-          />
-        </SettingItem>
-        <SettingItem
-          title={t('settings.autoQuitWithoutCore')}
-          actions={
-            <Tooltip content={t('settings.autoQuitWithoutCoreTooltip')}>
-              <Button isIconOnly size="sm" variant="light">
-                <IoIosHelpCircle className="text-lg" />
-              </Button>
-            </Tooltip>
-          }
-          divider
-        >
-          <Switch
-            size="sm"
-            isSelected={autoQuitWithoutCore}
-            onValueChange={(v) => {
-              patchAppConfig({ autoQuitWithoutCore: v })
-            }}
-          />
-        </SettingItem>
-        {autoQuitWithoutCore && (
+        {!isWebMode && (
           <>
-            <SettingItem title={t('settings.autoQuitWithoutCoreMode')} divider>
-              <Tabs
+            <SettingItem title={t('settings.silentStart')} divider>
+              <Switch
                 size="sm"
-                color="primary"
-                selectedKey={autoQuitWithoutCoreMode}
-                onSelectionChange={async (key) => {
-                  const mode = key as 'core' | 'tray'
-                  await patchAppConfig({ autoQuitWithoutCoreMode: mode })
-                  if (mode === 'core' && autoQuitWithoutCoreDelay < 5) {
-                    await patchAppConfig({ autoQuitWithoutCoreDelay: 5 })
-                  }
+                isSelected={silentStart}
+                onValueChange={(v) => {
+                  patchAppConfig({ silentStart: v })
                 }}
-              >
-                <Tab key="core" title={t('settings.autoQuitWithoutCoreModeCore')} />
-                <Tab key="tray" title={t('settings.autoQuitWithoutCoreModeTray')} />
-              </Tabs>
+              />
             </SettingItem>
-            <SettingItem title={t('settings.autoQuitWithoutCoreDelay')} divider>
-              <div className="flex items-center gap-2">
-                <Input
-                  size="sm"
-                  className="w-25"
-                  type="number"
-                  value={autoQuitWithoutCoreDelay.toString()}
-                  onValueChange={async (v: string) => {
-                    const num = parseInt(v)
-                    if (!isNaN(num)) {
-                      await patchAppConfig({ autoQuitWithoutCoreDelay: num })
-                    }
-                  }}
-                  onBlur={async (e) => {
-                    const minDelay = autoQuitWithoutCoreMode === 'core' ? 5 : 0
-                    let num = parseInt(e.target.value)
-                    if (isNaN(num)) num = minDelay
-                    if (num < minDelay) num = minDelay
-                    await patchAppConfig({ autoQuitWithoutCoreDelay: num })
-                  }}
-                />
-                <span className="text-default-500">{t('common.seconds')}</span>
-              </div>
+            <SettingItem
+              title={t('settings.autoQuitWithoutCore')}
+              actions={
+                <Tooltip content={t('settings.autoQuitWithoutCoreTooltip')}>
+                  <Button isIconOnly size="sm" variant="light">
+                    <IoIosHelpCircle className="text-lg" />
+                  </Button>
+                </Tooltip>
+              }
+              divider
+            >
+              <Switch
+                size="sm"
+                isSelected={autoQuitWithoutCore}
+                onValueChange={(v) => {
+                  patchAppConfig({ autoQuitWithoutCore: v })
+                }}
+              />
             </SettingItem>
+            {autoQuitWithoutCore && (
+              <>
+                <SettingItem title={t('settings.autoQuitWithoutCoreMode')} divider>
+                  <Tabs
+                    size="sm"
+                    color="primary"
+                    selectedKey={autoQuitWithoutCoreMode}
+                    onSelectionChange={async (key) => {
+                      const mode = key as 'core' | 'tray'
+                      await patchAppConfig({ autoQuitWithoutCoreMode: mode })
+                      if (mode === 'core' && autoQuitWithoutCoreDelay < 5) {
+                        await patchAppConfig({ autoQuitWithoutCoreDelay: 5 })
+                      }
+                    }}
+                  >
+                    <Tab key="core" title={t('settings.autoQuitWithoutCoreModeCore')} />
+                    <Tab key="tray" title={t('settings.autoQuitWithoutCoreModeTray')} />
+                  </Tabs>
+                </SettingItem>
+                <SettingItem title={t('settings.autoQuitWithoutCoreDelay')} divider>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      size="sm"
+                      className="w-25"
+                      type="number"
+                      value={autoQuitWithoutCoreDelay.toString()}
+                      onValueChange={async (v: string) => {
+                        const num = parseInt(v)
+                        if (!isNaN(num)) {
+                          await patchAppConfig({ autoQuitWithoutCoreDelay: num })
+                        }
+                      }}
+                      onBlur={async (e) => {
+                        const minDelay = autoQuitWithoutCoreMode === 'core' ? 5 : 0
+                        let num = parseInt(e.target.value)
+                        if (isNaN(num)) num = minDelay
+                        if (num < minDelay) num = minDelay
+                        await patchAppConfig({ autoQuitWithoutCoreDelay: num })
+                      }}
+                    />
+                    <span className="text-default-500">{t('common.seconds')}</span>
+                  </div>
+                </SettingItem>
+              </>
+            )}
           </>
         )}
         <SettingItem
@@ -494,220 +507,224 @@ const GeneralConfig: React.FC = () => {
             <SelectItem key="nushell">Nushell</SelectItem>
           </Select>
         </SettingItem>
-        <SettingItem title={t('settings.showFloatingWindow')} divider>
-          <Switch
-            size="sm"
-            isSelected={showFloating}
-            onValueChange={async (v) => {
-              await patchAppConfig({ showFloatingWindow: v })
-              if (v) {
-                showFloatingWindow()
-              } else {
-                closeFloatingWindow()
-              }
-            }}
-          />
-        </SettingItem>
-
-        {showFloating && (
+        {!isWebMode && (
           <>
-            <SettingItem title={t('settings.spinFloatingIcon')} divider>
+            <SettingItem title={t('settings.showFloatingWindow')} divider>
               <Switch
                 size="sm"
-                isSelected={spinFloatingIcon}
+                isSelected={showFloating}
                 onValueChange={async (v) => {
-                  await patchAppConfig({ spinFloatingIcon: v })
-                  window.electron.ipcRenderer.send('updateFloatingWindow')
-                }}
-              />
-            </SettingItem>
-            <SettingItem title={t('settings.floatingWindowCompatMode')} divider>
-              <div className="flex items-center gap-2">
-                <Switch
-                  size="sm"
-                  isSelected={floatingWindowCompatMode}
-                  onValueChange={async (v) => {
-                    await patchAppConfig({ floatingWindowCompatMode: v })
+                  await patchAppConfig({ showFloatingWindow: v })
+                  if (v) {
+                    showFloatingWindow()
+                  } else {
                     closeFloatingWindow()
-                    setTimeout(() => {
-                      showFloatingWindow()
-                    }, 100)
-                  }}
-                />
-                <Tooltip content={t('settings.floatingWindowCompatModeTooltip')}>
-                  <IoIosHelpCircle className="text-default-500 cursor-help" />
-                </Tooltip>
-              </div>
-            </SettingItem>
-          </>
-        )}
-        {showFloating && (
-          <SettingItem title={t('settings.disableTray')} divider>
-            <Switch
-              size="sm"
-              isSelected={disableTray}
-              onValueChange={async (v) => {
-                await patchAppConfig({ disableTray: v })
-                if (v) {
-                  closeTrayIcon()
-                } else {
-                  showTrayIcon()
-                }
-              }}
-            />
-          </SettingItem>
-        )}
-        {!disableTray && (
-          <>
-            <SettingItem title={t('settings.swapTrayClick')} divider>
-              <Switch
-                size="sm"
-                isSelected={swapTrayClick}
-                onValueChange={async (v) => {
-                  await patchAppConfig({ swapTrayClick: v })
-                  closeTrayIcon()
-                  setTimeout(() => {
-                    showTrayIcon()
-                  }, 100)
-                }}
-              />
-            </SettingItem>
-            <SettingItem title={t('settings.disableTrayIconColor')} divider>
-              <Switch
-                size="sm"
-                isSelected={disableTrayIconColor}
-                isDisabled={hasCustomTrayIcons}
-                onValueChange={async (v) => {
-                  await patchAppConfig({ disableTrayIconColor: v })
-                  await updateTrayIcon()
-                }}
-              />
-            </SettingItem>
-            {platform === 'darwin' && showTraffic && (
-              <SettingItem title={t('settings.trayTrafficTextColor')} divider>
-                <Tabs
-                  size="sm"
-                  color="primary"
-                  selectedKey={trayTrafficTextColor}
-                  onSelectionChange={(key) => {
-                    void patchAppConfig({
-                      trayTrafficTextColor: key as 'auto' | 'white' | 'black'
-                    })
-                  }}
-                >
-                  <Tab key="auto" title={t('settings.trayTrafficTextColorAuto')} />
-                  <Tab key="white" title={t('settings.trayTrafficTextColorWhite')} />
-                  <Tab key="black" title={t('settings.trayTrafficTextColorBlack')} />
-                </Tabs>
-              </SettingItem>
-            )}
-            <SettingItem
-              title={t('settings.customTrayIcon')}
-              actions={
-                <Tooltip content={t('settings.customTrayIconTooltip')}>
-                  <Button isIconOnly size="sm" variant="light">
-                    <IoIosHelpCircle className="text-lg" />
-                  </Button>
-                </Tooltip>
-              }
-            >
-              <div className="flex min-w-0 max-w-[68%] items-center justify-end gap-2">
-                <span
-                  className="min-w-0 truncate text-xs text-default-500"
-                  title={getTrayIconDisplayText(customTrayIcon)}
-                >
-                  {getTrayIconDisplayText(customTrayIcon)}
-                </span>
-                <Button size="sm" variant="flat" onPress={() => selectTrayIcon('custom')}>
-                  {t(customTrayIcon ? 'settings.changeTrayIcon' : 'settings.selectTrayIcon')}
-                </Button>
-                {customTrayIcon && (
-                  <Button size="sm" variant="light" onPress={() => resetTrayIcon('custom')}>
-                    {t('common.default')}
-                  </Button>
-                )}
-                <Button
-                  size="sm"
-                  variant="light"
-                  endContent={
-                    <IoIosArrowDown
-                      className={`text-sm transition-transform ${trayIconDrawerOpen ? 'rotate-180' : ''}`}
-                    />
                   }
-                  onPress={() => setTrayIconDrawerOpen((v) => !v)}
-                >
-                  {t('settings.customTrayIconStates')}
-                </Button>
-              </div>
-            </SettingItem>
-            {trayIconDrawerOpen && (
-              <div className="mb-2 ml-4 mr-1 mt-2 rounded-lg border border-default-200 bg-default-50/40 p-2">
-                <div className="flex flex-col gap-1">
-                  {customTrayIconStateKeys.map((key) =>
-                    renderTrayIconPicker(
-                      key,
-                      t(`settings.customTrayIcon.${key}`),
-                      customTrayIcons[key]
-                    )
-                  )}
-                </div>
-              </div>
-            )}
-            <Divider className="my-2" />
-          </>
-        )}
-        {platform !== 'linux' && (
-          <>
-            <SettingItem title={t('settings.proxyInTray')} divider>
-              <Switch
-                size="sm"
-                isSelected={proxyInTray}
-                onValueChange={async (v) => {
-                  await patchAppConfig({ proxyInTray: v })
                 }}
               />
             </SettingItem>
-            {proxyInTray && (
+
+            {showFloating && (
               <>
-                <SettingItem title={t('settings.showCurrentProxyInTray')} divider>
+                <SettingItem title={t('settings.spinFloatingIcon')} divider>
                   <Switch
                     size="sm"
-                    isSelected={showCurrentProxyInTray}
+                    isSelected={spinFloatingIcon}
                     onValueChange={async (v) => {
-                      await patchAppConfig({ showCurrentProxyInTray: v })
+                      await patchAppConfig({ spinFloatingIcon: v })
+                      window.electron.ipcRenderer.send('updateFloatingWindow')
                     }}
                   />
                 </SettingItem>
-                <SettingItem title={t('settings.trayProxyGroupStyle')} divider>
-                  <Tabs
-                    size="sm"
-                    color="primary"
-                    selectedKey={trayProxyGroupStyle}
-                    onSelectionChange={(key) => {
-                      patchAppConfig({ trayProxyGroupStyle: key as 'default' | 'submenu' })
-                    }}
-                  >
-                    <Tab key="default" title={t('settings.trayProxyGroupStyleDefault')} />
-                    <Tab key="submenu" title={t('settings.trayProxyGroupStyleSubmenu')} />
-                  </Tabs>
+                <SettingItem title={t('settings.floatingWindowCompatMode')} divider>
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      size="sm"
+                      isSelected={floatingWindowCompatMode}
+                      onValueChange={async (v) => {
+                        await patchAppConfig({ floatingWindowCompatMode: v })
+                        closeFloatingWindow()
+                        setTimeout(() => {
+                          showFloatingWindow()
+                        }, 100)
+                      }}
+                    />
+                    <Tooltip content={t('settings.floatingWindowCompatModeTooltip')}>
+                      <IoIosHelpCircle className="text-default-500 cursor-help" />
+                    </Tooltip>
+                  </div>
                 </SettingItem>
               </>
             )}
-            <SettingItem
-              title={t('settings.showTraffic', {
-                context: platform === 'win32' ? 'windows' : 'mac'
-              })}
-              divider
-            >
-              <Switch
-                size="sm"
-                isSelected={showTraffic}
-                onValueChange={async (v) => {
-                  await patchAppConfig({ showTraffic: v })
-                  await startMonitor()
-                }}
-              />
-            </SettingItem>
+            {showFloating && (
+              <SettingItem title={t('settings.disableTray')} divider>
+                <Switch
+                  size="sm"
+                  isSelected={disableTray}
+                  onValueChange={async (v) => {
+                    await patchAppConfig({ disableTray: v })
+                    if (v) {
+                      closeTrayIcon()
+                    } else {
+                      showTrayIcon()
+                    }
+                  }}
+                />
+              </SettingItem>
+            )}
+            {!disableTray && (
+              <>
+                <SettingItem title={t('settings.swapTrayClick')} divider>
+                  <Switch
+                    size="sm"
+                    isSelected={swapTrayClick}
+                    onValueChange={async (v) => {
+                      await patchAppConfig({ swapTrayClick: v })
+                      closeTrayIcon()
+                      setTimeout(() => {
+                        showTrayIcon()
+                      }, 100)
+                    }}
+                  />
+                </SettingItem>
+                <SettingItem title={t('settings.disableTrayIconColor')} divider>
+                  <Switch
+                    size="sm"
+                    isSelected={disableTrayIconColor}
+                    isDisabled={hasCustomTrayIcons}
+                    onValueChange={async (v) => {
+                      await patchAppConfig({ disableTrayIconColor: v })
+                      await updateTrayIcon()
+                    }}
+                  />
+                </SettingItem>
+                {platform === 'darwin' && showTraffic && (
+                  <SettingItem title={t('settings.trayTrafficTextColor')} divider>
+                    <Tabs
+                      size="sm"
+                      color="primary"
+                      selectedKey={trayTrafficTextColor}
+                      onSelectionChange={(key) => {
+                        void patchAppConfig({
+                          trayTrafficTextColor: key as 'auto' | 'white' | 'black'
+                        })
+                      }}
+                    >
+                      <Tab key="auto" title={t('settings.trayTrafficTextColorAuto')} />
+                      <Tab key="white" title={t('settings.trayTrafficTextColorWhite')} />
+                      <Tab key="black" title={t('settings.trayTrafficTextColorBlack')} />
+                    </Tabs>
+                  </SettingItem>
+                )}
+                <SettingItem
+                  title={t('settings.customTrayIcon')}
+                  actions={
+                    <Tooltip content={t('settings.customTrayIconTooltip')}>
+                      <Button isIconOnly size="sm" variant="light">
+                        <IoIosHelpCircle className="text-lg" />
+                      </Button>
+                    </Tooltip>
+                  }
+                >
+                  <div className="flex min-w-0 max-w-[68%] items-center justify-end gap-2">
+                    <span
+                      className="min-w-0 truncate text-xs text-default-500"
+                      title={getTrayIconDisplayText(customTrayIcon)}
+                    >
+                      {getTrayIconDisplayText(customTrayIcon)}
+                    </span>
+                    <Button size="sm" variant="flat" onPress={() => selectTrayIcon('custom')}>
+                      {t(customTrayIcon ? 'settings.changeTrayIcon' : 'settings.selectTrayIcon')}
+                    </Button>
+                    {customTrayIcon && (
+                      <Button size="sm" variant="light" onPress={() => resetTrayIcon('custom')}>
+                        {t('common.default')}
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="light"
+                      endContent={
+                        <IoIosArrowDown
+                          className={`text-sm transition-transform ${trayIconDrawerOpen ? 'rotate-180' : ''}`}
+                        />
+                      }
+                      onPress={() => setTrayIconDrawerOpen((v) => !v)}
+                    >
+                      {t('settings.customTrayIconStates')}
+                    </Button>
+                  </div>
+                </SettingItem>
+                {trayIconDrawerOpen && (
+                  <div className="mb-2 ml-4 mr-1 mt-2 rounded-lg border border-default-200 bg-default-50/40 p-2">
+                    <div className="flex flex-col gap-1">
+                      {customTrayIconStateKeys.map((key) =>
+                        renderTrayIconPicker(
+                          key,
+                          t(`settings.customTrayIcon.${key}`),
+                          customTrayIcons[key]
+                        )
+                      )}
+                    </div>
+                  </div>
+                )}
+                <Divider className="my-2" />
+              </>
+            )}
+            {platform !== 'linux' && (
+              <>
+                <SettingItem title={t('settings.proxyInTray')} divider>
+                  <Switch
+                    size="sm"
+                    isSelected={proxyInTray}
+                    onValueChange={async (v) => {
+                      await patchAppConfig({ proxyInTray: v })
+                    }}
+                  />
+                </SettingItem>
+                {proxyInTray && (
+                  <>
+                    <SettingItem title={t('settings.showCurrentProxyInTray')} divider>
+                      <Switch
+                        size="sm"
+                        isSelected={showCurrentProxyInTray}
+                        onValueChange={async (v) => {
+                          await patchAppConfig({ showCurrentProxyInTray: v })
+                        }}
+                      />
+                    </SettingItem>
+                    <SettingItem title={t('settings.trayProxyGroupStyle')} divider>
+                      <Tabs
+                        size="sm"
+                        color="primary"
+                        selectedKey={trayProxyGroupStyle}
+                        onSelectionChange={(key) => {
+                          patchAppConfig({ trayProxyGroupStyle: key as 'default' | 'submenu' })
+                        }}
+                      >
+                        <Tab key="default" title={t('settings.trayProxyGroupStyleDefault')} />
+                        <Tab key="submenu" title={t('settings.trayProxyGroupStyleSubmenu')} />
+                      </Tabs>
+                    </SettingItem>
+                  </>
+                )}
+                <SettingItem
+                  title={t('settings.showTraffic', {
+                    context: platform === 'win32' ? 'windows' : 'mac'
+                  })}
+                  divider
+                >
+                  <Switch
+                    size="sm"
+                    isSelected={showTraffic}
+                    onValueChange={async (v) => {
+                      await patchAppConfig({ showTraffic: v })
+                      await startMonitor()
+                    }}
+                  />
+                </SettingItem>
+              </>
+            )}
           </>
         )}
         {platform === 'darwin' && (
@@ -724,18 +741,20 @@ const GeneralConfig: React.FC = () => {
           </>
         )}
 
-        <SettingItem title={t('settings.useWindowFrame')} divider>
-          <Switch
-            size="sm"
-            isSelected={useWindowFrame}
-            isDisabled={isRelaunching}
-            onValueChange={(v) => {
-              if (isRelaunching) return
-              setPendingWindowFrameValue(v)
-              setShowWindowFrameConfirm(true)
-            }}
-          />
-        </SettingItem>
+        {!isWebMode && (
+          <SettingItem title={t('settings.useWindowFrame')} divider>
+            <Switch
+              size="sm"
+              isSelected={useWindowFrame}
+              isDisabled={isRelaunching}
+              onValueChange={(v) => {
+                if (isRelaunching) return
+                setPendingWindowFrameValue(v)
+                setShowWindowFrameConfirm(true)
+              }}
+            />
+          </SettingItem>
+        )}
         <SettingItem title={t('settings.rememberSelectedSiderCard')} divider>
           <Switch
             size="sm"
@@ -772,19 +791,21 @@ const GeneralConfig: React.FC = () => {
             }}
           />
         </SettingItem>
-        <SettingItem title={t('settings.triggerMainWindowBehavior')} divider>
-          <Tabs
-            size="sm"
-            color="primary"
-            selectedKey={triggerMainWindowBehavior}
-            onSelectionChange={(key) => {
-              patchAppConfig({ triggerMainWindowBehavior: key as 'show' | 'toggle' })
-            }}
-          >
-            <Tab key="show" title={t('settings.triggerMainWindowBehaviorShow')} />
-            <Tab key="toggle" title={t('settings.triggerMainWindowBehaviorToggle')} />
-          </Tabs>
-        </SettingItem>
+        {!isWebMode && (
+          <SettingItem title={t('settings.triggerMainWindowBehavior')} divider>
+            <Tabs
+              size="sm"
+              color="primary"
+              selectedKey={triggerMainWindowBehavior}
+              onSelectionChange={(key) => {
+                patchAppConfig({ triggerMainWindowBehavior: key as 'show' | 'toggle' })
+              }}
+            >
+              <Tab key="show" title={t('settings.triggerMainWindowBehaviorShow')} />
+              <Tab key="toggle" title={t('settings.triggerMainWindowBehaviorToggle')} />
+            </Tabs>
+          </SettingItem>
+        )}
         <SettingItem title={t('settings.hideConnectionCardWave')} divider>
           <Switch
             size="sm"
@@ -794,28 +815,30 @@ const GeneralConfig: React.FC = () => {
             }}
           />
         </SettingItem>
-        <SettingItem
-          title={t('settings.disableHardwareAcceleration')}
-          actions={
-            <Tooltip content={t('settings.disableHardwareAccelerationTooltip')}>
-              <Button isIconOnly size="sm" variant="light">
-                <IoIosHelpCircle className="text-lg" />
-              </Button>
-            </Tooltip>
-          }
-          divider
-        >
-          <Switch
-            size="sm"
-            isSelected={disableHardwareAcceleration}
-            isDisabled={isRelaunching}
-            onValueChange={(v) => {
-              if (isRelaunching) return
-              setPendingHardwareAccelValue(v)
-              setShowHardwareAccelConfirm(true)
-            }}
-          />
-        </SettingItem>
+        {!isWebMode && (
+          <SettingItem
+            title={t('settings.disableHardwareAcceleration')}
+            actions={
+              <Tooltip content={t('settings.disableHardwareAccelerationTooltip')}>
+                <Button isIconOnly size="sm" variant="light">
+                  <IoIosHelpCircle className="text-lg" />
+                </Button>
+              </Tooltip>
+            }
+            divider
+          >
+            <Switch
+              size="sm"
+              isSelected={disableHardwareAcceleration}
+              isDisabled={isRelaunching}
+              onValueChange={(v) => {
+                if (isRelaunching) return
+                setPendingHardwareAccelValue(v)
+                setShowHardwareAccelConfirm(true)
+              }}
+            />
+          </SettingItem>
+        )}
         <SettingItem title={t('settings.backgroundColor')} divider>
           <Tabs
             size="sm"
