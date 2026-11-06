@@ -12,7 +12,13 @@
 import { existsSync, readFileSync } from 'fs'
 import http from 'http'
 import path from 'path'
-import express, { type NextFunction, type Request, type Response } from 'express'
+import express, {
+  type Express,
+  type NextFunction,
+  type Request,
+  type RequestHandler,
+  type Response
+} from 'express'
 import { WebSocketServer, type WebSocket } from 'ws'
 import { addClient, clientCount, closeAllClients, removeClient } from './bridge'
 import {
@@ -35,7 +41,8 @@ const WEB_CSP = [
   'img-src * data: blob:',
   "font-src 'self' data:",
   "connect-src 'self' ws: wss:",
-  "frame-src 'self' http://127.0.0.1:*",
+  // /substore 走同源代理；127.0.0.1 与 https: 留给"自定义 Sub-Store 地址"
+  "frame-src 'self' http://127.0.0.1:* https:",
   "worker-src 'self' blob:"
 ].join('; ')
 
@@ -205,11 +212,153 @@ function readCookieToken(header: string | undefined): string | undefined {
   return parseCookies(header)[SESSION_COOKIE]
 }
 
+/** Sub-Store 前端里写死的根绝对资源路径，需要一并转发到它自己的目录 */
+const SUB_STORE_ASSET_MOUNTS = ['/chunks', '/css', '/fonts', '/images']
+
+/**
+ * Sub-Store 前端是 history 路由的 SPA，路由表里只有 `/`、`/subs` 这类根路径。
+ * 挂到 `/substore/` 下之后 `location.pathname` 变成 `/substore/...`，路由一条都匹配不上，
+ * 页面只会显示"地址未找到"。这里在入口脚本之前把 pathname 还原成根路径让路由正常启动，
+ * 同时给 pushState/replaceState 补前缀，保证地址栏（以及刷新）仍然落在 `/substore` 下。
+ */
+const SUB_STORE_ROUTER_SHIM = `<script>
+(function () {
+  var P = '/substore'
+  var push = history.pushState
+  var replace = history.replaceState
+  function withPrefix(url) {
+    if (typeof url !== 'string') return url
+    var origin = location.origin
+    var rest = url.indexOf(origin) === 0 ? url.slice(origin.length) : url.charAt(0) === '/' ? url : null
+    if (rest === null) return url
+    if (rest === P || rest.indexOf(P + '/') === 0) return url
+    return origin + P + rest
+  }
+  history.pushState = function (state, title, url) { return push.call(this, state, title, withPrefix(url)) }
+  history.replaceState = function (state, title, url) { return replace.call(this, state, title, withPrefix(url)) }
+  var path = location.pathname
+  if (path.indexOf(P) === 0) {
+    // 用原生 replaceState 还原，避免被上面的补前缀逻辑又改回去
+    replace.call(history, history.state, '', (path.slice(P.length) || '/') + location.search + location.hash)
+  }
+})()
+</script>`
+
+/** 前端 index.html 的资源都写成 `/xxx`，挂到 /substore 下必须补前缀 */
+function rewriteSubStoreHtml(html: string): string {
+  return (
+    html
+      .replace(/(href|src)="\/(?!\/)/g, '$1="/substore/')
+      // PWA 的 service worker 作用域会覆盖整个站点，嵌在 iframe 里没有必要，去掉
+      .replace(/<script[^>]*registerSW\.js[^>]*><\/script>/i, '')
+      .replace(/<head(\s[^>]*)?>/i, (head) => `${head}\n    ${SUB_STORE_ROUTER_SHIM}`)
+  )
+}
+
+/**
+ * 主进程模块在 HTTP 服务启动之后才加载，Sub-Store 的端口也是运行时才分配的
+ * （前端 14122 起、后端 38324 起，取第一个空闲端口），所以每次请求时再读。
+ */
+async function subStorePorts(): Promise<{ frontend?: number; backend?: number }> {
+  const mod = await import('../main/resolve/server')
+  return { frontend: mod.subStoreFrontendPort, backend: mod.subStorePort }
+}
+
+function forwardSubStore(
+  req: Request,
+  res: Response,
+  port: number,
+  targetPath: string,
+  rewriteHtml: boolean
+): void {
+  const upstream = http.request(
+    {
+      host: '127.0.0.1',
+      port,
+      path: targetPath,
+      method: req.method,
+      headers: { ...req.headers, host: `127.0.0.1:${port}` }
+    },
+    (upstreamRes) => {
+      const headers = { ...upstreamRes.headers }
+      const isHtml = String(headers['content-type'] ?? '').includes('text/html')
+      if (!rewriteHtml || !isHtml) {
+        res.writeHead(upstreamRes.statusCode ?? 502, headers)
+        upstreamRes.pipe(res)
+        return
+      }
+      const chunks: Buffer[] = []
+      upstreamRes.on('data', (chunk: Buffer) => chunks.push(chunk))
+      upstreamRes.on('end', () => {
+        const body = rewriteSubStoreHtml(Buffer.concat(chunks).toString('utf-8'))
+        delete headers['content-length']
+        delete headers['transfer-encoding']
+        res.writeHead(upstreamRes.statusCode ?? 200, headers)
+        res.end(body)
+      })
+    }
+  )
+  upstream.on('error', (error) => {
+    if (res.headersSent) {
+      res.end()
+      return
+    }
+    res.status(502).json({ ok: false, error: `Sub-Store 未就绪：${error.message}` })
+  })
+  req.pipe(upstream)
+}
+
+/**
+ * Sub-Store 同源代理。
+ *
+ * 桌面版里 Sub-Store 的前后端都只监听 `127.0.0.1`，渲染进程与它们同机，内嵌页直接写
+ * `http://127.0.0.1:<port>` 就能用。容器里渲染层跑在用户自己的浏览器上，那个
+ * `127.0.0.1` 指向的是用户机器，页面只会一直显示"无法访问此网站"。
+ *
+ * 这里把两者挂到同源路径下，浏览器够得着的地址就变成 Web UI 自己：
+ *   /substore/       → 前端（index.html 的根绝对路径改写成 /substore/ 前缀）
+ *   /substore/api/*  → 后端（Sub-Store 自己就是 /api/*，前缀去掉即可）
+ * 前端产物引用的 /chunks /css /fonts /images 是根绝对路径，另外单独转发。
+ *
+ * 必须注册在 express.json 之前：JSON 请求体被解析器吃掉后就没法再转发给上游。
+ */
+function registerSubStoreProxy(app: Express, requireAuth: RequestHandler): void {
+  const frontendHandler = async (req: Request, res: Response): Promise<void> => {
+    const { frontend, backend } = await subStorePorts()
+    const target = req.url || '/'
+    if (target === '/api' || target.startsWith('/api/')) {
+      if (!backend) {
+        res.status(503).json({ ok: false, error: 'Sub-Store 后端未启动' })
+        return
+      }
+      forwardSubStore(req, res, backend, target, false)
+      return
+    }
+    if (!frontend) {
+      res.status(503).json({ ok: false, error: 'Sub-Store 前端未启动' })
+      return
+    }
+    forwardSubStore(req, res, frontend, target, true)
+  }
+
+  app.use('/substore', requireAuth, frontendHandler)
+
+  for (const mount of SUB_STORE_ASSET_MOUNTS) {
+    app.use(mount, requireAuth, async (req: Request, res: Response): Promise<void> => {
+      const { frontend } = await subStorePorts()
+      if (!frontend) {
+        res.status(404).end()
+        return
+      }
+      forwardSubStore(req, res, frontend, `${mount}${req.url || ''}`, false)
+    })
+  }
+}
+
 export function createHttpServer(ctx: ServerContext): http.Server {
   const app = express()
   app.disable('x-powered-by')
   app.set('etag', false)
-  app.use(express.json({ limit: '128mb' }))
 
   const requireAuth = (req: Request, res: Response, next: NextFunction): void => {
     if (isAuthenticated(req, ctx)) {
@@ -218,6 +367,10 @@ export function createHttpServer(ctx: ServerContext): http.Server {
     }
     res.status(401).json({ ok: false, error: 'unauthorized' })
   }
+
+  // 静态资源与 /api 之前：子应用请求体要原样转发，不能被 json 解析器消费
+  registerSubStoreProxy(app, requireAuth)
+  app.use(express.json({ limit: '128mb' }))
 
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true, uptime: process.uptime(), clients: clientCount() })
@@ -292,6 +445,8 @@ export function createHttpServer(ctx: ServerContext): http.Server {
     }
     res.type('application/javascript').send(readFileSync(file))
   })
+
+  registerSubStoreProxy(app, requireAuth)
 
   app.use(
     express.static(webDir(), {

@@ -23,6 +23,24 @@ const SubStore: React.FC = () => {
   const [backendPort, setBackendPort] = useState<number | undefined>()
   const [frontendPort, setFrontendPort] = useState<number | undefined>()
   const [isUpdating, setIsUpdating] = useState(false)
+  // 浏览器里 Sub-Store 的前后端都由 Web 服务同源代理（/substore、/substore/api），
+  // 直接写 127.0.0.1 只会指向用户自己的机器。桌面版仍然直连本机端口。
+  const webShimInstalled = Boolean(
+    (window as unknown as { __clashPartyWebShimInstalled?: boolean }).__clashPartyWebShimInstalled
+  )
+  const webOrigin = webShimInstalled ? window.location.origin : ''
+  const frontendUrl = useCustomSubStore
+    ? ''
+    : webOrigin
+      ? `${webOrigin}/substore/`
+      : `http://127.0.0.1:${frontendPort}`
+  const apiUrl = useCustomSubStore
+    ? customSubStoreUrl
+    : webOrigin
+      ? `${webOrigin}/substore`
+      : `http://127.0.0.1:${backendPort}`
+  // 自定义 Sub-Store 只替换后端地址，前端仍用本地这份
+  const embedUrl = `${frontendUrl}?api=${encodeURIComponent(apiUrl ?? '')}`
   const getPort = async (ensureStarted = true): Promise<void> => {
     if (ensureStarted) {
       const ports = await ensureSubStoreServices()
@@ -84,9 +102,7 @@ const SubStore: React.FC = () => {
               className="app-nodrag"
               variant="light"
               onPress={() => {
-                open(
-                  `http://127.0.0.1:${frontendPort}?api=${useCustomSubStore ? customSubStoreUrl : `http://127.0.0.1:${backendPort}`}`
-                )
+                open(embedUrl)
               }}
             >
               <HiExternalLink className="text-lg" />
@@ -94,11 +110,7 @@ const SubStore: React.FC = () => {
           </div>
         }
       >
-        <iframe
-          className="w-full h-full"
-          allow="clipboard-write; clipboard-read"
-          src={`http://127.0.0.1:${frontendPort}?api=${useCustomSubStore ? customSubStoreUrl : `http://127.0.0.1:${backendPort}`}`}
-        />
+        <iframe className="w-full h-full" allow="clipboard-write; clipboard-read" src={embedUrl} />
       </BasePage>
     </>
   )
