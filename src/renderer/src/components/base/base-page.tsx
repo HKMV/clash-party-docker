@@ -27,14 +27,26 @@ const BasePage = forwardRef<HTMLDivElement, Props>((props, ref) => {
   }
 
   useEffect(() => {
-    if (platform !== 'darwin' && !useWindowFrame) {
-      try {
-        // @ts-ignore windowControlsOverlay
-        const windowControlsOverlay = window.navigator.windowControlsOverlay
-        setOverlayWidth(window.innerWidth - windowControlsOverlay.getTitlebarAreaRect().width)
-      } catch {
-        // ignore
+    if (platform === 'darwin' || useWindowFrame) return
+    // 普通浏览器里 navigator.windowControlsOverlay 存在但 visible=false，
+    // getTitlebarAreaRect() 的宽度是 0；不先看 visible 就会算出 innerWidth，
+    // 于是标题栏右侧被加上 1600px 的 margin，标题被挤成 0 宽、页头控件全部叠到左边。
+    const overlay = (
+      window.navigator as Navigator & {
+        windowControlsOverlay?: {
+          visible: boolean
+          getTitlebarAreaRect: () => DOMRect
+        }
       }
+    ).windowControlsOverlay
+    if (!overlay?.visible) {
+      setOverlayWidth(0)
+      return
+    }
+    try {
+      setOverlayWidth(Math.max(0, window.innerWidth - overlay.getTitlebarAreaRect().width))
+    } catch {
+      setOverlayWidth(0)
     }
   }, [useWindowFrame])
 

@@ -300,7 +300,7 @@ const Connections: React.FC = () => {
       title={t('connections.title')}
       header={
         <div className="flex">
-          <div className="flex items-center">
+          <div className="flex items-center shrink-0 whitespace-nowrap">
             <span className="mx-1 text-gray-400">
               ↑ {calcTraffic(connectionsInfo?.uploadTotal ?? 0)}{' '}
             </span>
