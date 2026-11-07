@@ -1,6 +1,6 @@
 import { Worker } from 'worker_threads'
 import { existsSync, mkdirSync } from 'fs'
-import { writeFile, rm, cp } from 'fs/promises'
+import { writeFile, readFile, rm, cp } from 'fs/promises'
 import http from 'http'
 import net from 'net'
 import path from 'path'
@@ -114,6 +114,35 @@ export async function stopSubStoreFrontendServer(): Promise<void> {
   }
 }
 
+/**
+ * 早期版本（或直接调接口）写入的单条订阅可能没有 `source` 字段。
+ * Sub-Store 下载时用 `source === 'local'` 决定读 content 还是 url，缺字段会走进
+ * `K.url.split(...)` 直接抛 "Cannot read properties of undefined (reading 'split')"，
+ * 表现为文件类型订阅下载 500。启动后端子进程前补一次字段，只补不改其它内容。
+ */
+async function normalizeSubStoreSubs(): Promise<void> {
+  const file = path.join(subStoreDir(), 'sub-store.json')
+  if (!existsSync(file)) return
+  let data: unknown
+  try {
+    data = JSON.parse(await readFile(file, 'utf-8'))
+  } catch {
+    return
+  }
+  const subs = (data as { subs?: unknown } | null)?.subs
+  if (!Array.isArray(subs)) return
+  let changed = false
+  for (const sub of subs) {
+    if (!sub || typeof sub !== 'object') continue
+    const item = sub as { source?: string; url?: string }
+    if (item.source) continue
+    item.source = item.url ? 'remote' : 'local'
+    changed = true
+  }
+  if (!changed) return
+  await writeFile(file, JSON.stringify(data, null, 2))
+}
+
 export async function startSubStoreBackendServer(): Promise<void> {
   const {
     useSubStore = DEFAULT_USE_SUB_STORE,
@@ -128,6 +157,7 @@ export async function startSubStoreBackendServer(): Promise<void> {
   if (!useSubStore) return
   if (!useCustomSubStore) {
     await stopSubStoreBackendServer()
+    await normalizeSubStoreSubs()
     subStorePort = await findAvailablePort(38324)
     const icon = nativeImage.createFromPath(subStoreIcon)
     icon.toDataURL()
