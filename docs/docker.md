@@ -78,8 +78,9 @@ services:
       - '7890:7890'
 ```
 
-把局域网设备的 HTTP/SOCKS5 代理指向 `http://<主机>:7890`，并在 Web UI 的
-「内核设置」里打开「允许局域网连接」，否则内核只接受本机连接。
+把局域网设备的 HTTP/SOCKS5 代理指向 `http://<主机>:7890`。服务端模式默认已开启
+「允许局域网连接」（`CLASH_PARTY_ALLOW_LAN=true`），无需再去内核设置里手动打开；
+不想开放时设置 `CLASH_PARTY_ALLOW_LAN=false`。
 
 ### 3. TUN 网关（host 网络）
 
@@ -225,23 +226,26 @@ echo "$GITHUB_TOKEN" | docker login ghcr.io -u <你的 GitHub 用户名> --passw
 | 7891 | SOCKS5                  | 需在「内核设置」里填写端口后重启内核         |
 | 7892 | HTTP                    | 同上                                         |
 
-内核默认 `bind-address: '*'`，因此端口映射到宿主机后即可作为局域网代理使用；
-是否需要允许局域网访问由 mihomo 自身的 `allow-lan` 决定（在 Web UI 的「内核设置」里调整）。
+内核默认 `bind-address: '*'`。服务端模式下 `allow-lan` 默认开启（首次启动会自动把旧的
+`allow-lan: false` 迁移为 `true`），端口映射到宿主机后即可作为局域网代理使用；需要关闭时
+设置 `CLASH_PARTY_ALLOW_LAN=false`，或在 Web UI 的「内核设置」里手动关闭（之后启动不再
+自动改写，除非显式设置了该环境变量）。
 
 ## 环境变量
 
-| 变量                         | 默认值            | 说明                                                                                           |
-| ---------------------------- | ----------------- | ---------------------------------------------------------------------------------------------- |
-| `CLASH_PARTY_WEBUI_PASSWORD` | 自动生成          | Web UI 登录密码。未设置时启动生成一次性密码并打印在容器日志中，同时写入 `/data/webui-password` |
-| `CLASH_PARTY_WEBUI_AUTH`     | `on`              | 设为 `off` 关闭登录校验（仅限完全可信的内网）                                                  |
-| `CLASH_PARTY_PORT`           | `8080`            | Web UI 监听端口                                                                                |
-| `CLASH_PARTY_HOST`           | `0.0.0.0`         | Web UI 监听地址                                                                                |
-| `CLASH_PARTY_DATA_DIR`       | `/data`           | 数据目录，建议挂载成卷                                                                         |
-| `CLASH_PARTY_WEB_DIR`        | `/app/web`        | 渲染层静态资源目录                                                                             |
-| `CLASH_PARTY_RESOURCES_DIR`  | `/app/extra`      | 内核与规则库目录                                                                               |
-| `CLASH_PARTY_APP_ROOT`       | `/app`            | 应用根目录（读取 `package.json` 版本号）                                                       |
-| `CLASH_PARTY_VERSION`        | 读 `package.json` | 覆盖界面上显示的版本号                                                                         |
-| `TZ`                         | 容器默认          | 时区，例如 `Asia/Shanghai`                                                                     |
+| 变量                         | 默认值            | 说明                                                                                                    |
+| ---------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------- |
+| `CLASH_PARTY_WEBUI_PASSWORD` | 自动生成          | Web UI 登录密码。未设置时启动生成一次性密码并打印在容器日志中，同时写入 `/data/webui-password`          |
+| `CLASH_PARTY_WEBUI_AUTH`     | `on`              | 设为 `off` 关闭登录校验（仅限完全可信的内网）                                                           |
+| `CLASH_PARTY_PORT`           | `8080`            | Web UI 监听端口                                                                                         |
+| `CLASH_PARTY_HOST`           | `0.0.0.0`         | Web UI 监听地址                                                                                         |
+| `CLASH_PARTY_ALLOW_LAN`      | `true`            | 代理端口是否允许局域网访问。设为 `false`/`0`/`off` 关闭；显式设置后每次启动都会覆盖「内核设置」里的开关 |
+| `CLASH_PARTY_DATA_DIR`       | `/data`           | 数据目录，建议挂载成卷                                                                                  |
+| `CLASH_PARTY_WEB_DIR`        | `/app/web`        | 渲染层静态资源目录                                                                                      |
+| `CLASH_PARTY_RESOURCES_DIR`  | `/app/extra`      | 内核与规则库目录                                                                                        |
+| `CLASH_PARTY_APP_ROOT`       | `/app`            | 应用根目录（读取 `package.json` 版本号）                                                                |
+| `CLASH_PARTY_VERSION`        | 读 `package.json` | 覆盖界面上显示的版本号                                                                                  |
+| `TZ`                         | 容器默认          | 时区，例如 `Asia/Shanghai`                                                                              |
 
 ## 数据卷
 

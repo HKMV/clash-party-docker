@@ -400,6 +400,24 @@ async function migrateMihomoConfig(): Promise<void> {
   if (!config['lan-allowed-ips']) patches['lan-allowed-ips'] = [...DEFAULT_MIHOMO_LAN_ALLOWED_IPS]
   if (!config['lan-disallowed-ips']) patches['lan-disallowed-ips'] = []
 
+  // 服务端模式（容器 / serve.mjs，以 CLASH_PARTY_WEB_DIR 标识）：代理端口默认对
+  // 局域网开放，这是容器部署的核心用法。首次启动把旧默认的 allow-lan=false 迁移
+  // 为 true，之后 UI 里的开关照常生效；显式设置 CLASH_PARTY_ALLOW_LAN 时每次启动
+  // 强制覆盖（env 优先于 UI）。桌面模式不干预，完全尊重 UI 设置。
+  if (process.env.CLASH_PARTY_WEB_DIR) {
+    const raw = (process.env.CLASH_PARTY_ALLOW_LAN ?? '').trim().toLowerCase()
+    const envValue = raw === '' ? undefined : !['false', '0', 'off', 'no'].includes(raw)
+    if (envValue !== undefined) {
+      if (config['allow-lan'] !== envValue) patches['allow-lan'] = envValue
+    } else {
+      const { serverAllowLanMigrated } = await getAppConfig()
+      if (!serverAllowLanMigrated) {
+        if (config['allow-lan'] !== true) patches['allow-lan'] = true
+        await patchAppConfig({ serverAllowLanMigrated: true })
+      }
+    }
+  }
+
   // tun device
   if (!config.tun?.device || (process.platform === 'darwin' && config.tun.device === 'Mihomo')) {
     patches.tun = {

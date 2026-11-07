@@ -25,6 +25,8 @@ services:
       # 未在 .env 里设置时使用默认值；密码留空则启动时自动生成并打印在日志中
       CLASH_PARTY_WEBUI_PASSWORD: ${CLASH_PARTY_WEBUI_PASSWORD:-}
       TZ: ${TZ:-Asia/Shanghai}
+      # 代理端口是否允许局域网访问，默认 true；设为 false 则只允许容器本机
+      # CLASH_PARTY_ALLOW_LAN: 'true'
       # 关闭 Web UI 登录（仅限完全可信的内网）
       # CLASH_PARTY_WEBUI_AUTH: 'off'
     volumes:
