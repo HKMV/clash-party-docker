@@ -251,6 +251,7 @@
   "mihomo.externalControllerSecret": "Ключ доступа",
   "mihomo.ipv6": "IPv6",
   "mihomo.allowLanConnection": "Разрешить LAN подключения",
+  "mihomo.allowLanWebHint": "На сервере управляется CLASH_PARTY_ALLOW_LAN (по умолчанию включено)",
   "mihomo.allowedIpSegments": "Разрешённые IP сегменты",
   "mihomo.disallowedIpSegments": "Запрещённые IP сегменты",
   "mihomo.userVerification": "Проверка пользователя",

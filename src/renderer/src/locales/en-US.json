@@ -260,6 +260,7 @@
   "mihomo.externalControllerSecret": "Access Token",
   "mihomo.ipv6": "IPv6",
   "mihomo.allowLanConnection": "Allow LAN Connection",
+  "mihomo.allowLanWebHint": "Controlled by CLASH_PARTY_ALLOW_LAN on the server (default on)",
   "mihomo.allowedIpSegments": "Allowed IP Segments",
   "mihomo.disallowedIpSegments": "Disallowed IP Segments",
   "mihomo.userVerification": "User Verification",

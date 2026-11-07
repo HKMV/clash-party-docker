@@ -249,6 +249,7 @@
   "mihomo.externalControllerSecret": "رمز کنترل‌کننده خارجی",
   "mihomo.ipv6": "IPv6",
   "mihomo.allowLanConnection": "اجازه اتصال شبکه محلی",
+  "mihomo.allowLanWebHint": "در سرور با CLASH_PARTY_ALLOW_LAN کنترل می‌شود (پیش‌فرض روشن)",
   "mihomo.allowedIpSegments": "بخش‌های IP مجاز",
   "mihomo.disallowedIpSegments": "بخش‌های IP غیرمجاز",
   "mihomo.userVerification": "تایید هویت کاربر",

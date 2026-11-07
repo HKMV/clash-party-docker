@@ -22,6 +22,7 @@ import SettingCard from '@renderer/components/base/base-setting-card'
 import SettingItem from '@renderer/components/base/base-setting-item'
 import { isValidListenAddress, getError, isValid } from '@renderer/utils/validate'
 import { useAppConfig } from '@renderer/hooks/use-app-config'
+import { isWebMode } from '@renderer/utils/web'
 import { useControledMihomoConfig } from '@renderer/hooks/use-controled-mihomo-config'
 import { platform } from '@renderer/utils/init'
 import { FaNetworkWired } from 'react-icons/fa'
@@ -1169,22 +1170,27 @@ const Mihomo: React.FC = () => {
           <SettingItem
             title={t('mihomo.allowLanConnection')}
             actions={
-              <Button
-                size="sm"
-                isIconOnly
-                variant="light"
-                onPress={() => {
-                  setLanOpen(true)
-                }}
-              >
-                <FaNetworkWired className="text-lg" />
-              </Button>
+              isWebMode ? (
+                <span className="text-xs text-default-400">{t('mihomo.allowLanWebHint')}</span>
+              ) : (
+                <Button
+                  size="sm"
+                  isIconOnly
+                  variant="light"
+                  onPress={() => {
+                    setLanOpen(true)
+                  }}
+                >
+                  <FaNetworkWired className="text-lg" />
+                </Button>
+              )
             }
             divider
           >
             <Switch
               size="sm"
               isSelected={allowLan}
+              isDisabled={isWebMode}
               onValueChange={(v) => {
                 onChangeNeedRestart({ 'allow-lan': v })
               }}

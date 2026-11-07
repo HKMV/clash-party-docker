@@ -260,6 +260,7 @@
   "mihomo.externalControllerSecret": "访问密钥",
   "mihomo.ipv6": "IPv6",
   "mihomo.allowLanConnection": "允許局域網連接",
+  "mihomo.allowLanWebHint": "服務端由 CLASH_PARTY_ALLOW_LAN 控制（預設開啟）",
   "mihomo.allowedIpSegments": "允许連接的 IP 段",
   "mihomo.disallowedIpSegments": "禁止連接的 IP 段",
   "mihomo.userVerification": "用戶驗證",
