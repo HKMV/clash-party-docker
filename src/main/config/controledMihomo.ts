@@ -11,6 +11,7 @@ import { atomicWriteFile, WriteQueue } from '../utils/safeFile'
 import { DEFAULT_CONTROL_DNS, DEFAULT_CONTROL_SNIFF } from '../../shared/appConfig'
 import { isLocalProfile, LOCAL_SHARED_CONFIG_KEYS } from '../../shared/local-config'
 import type { LocalSharedConfig } from '../local/compiler'
+import { resolveServerAllowLan } from '../utils/allowLan'
 import { getAppConfig, patchAppConfig } from './app'
 
 async function isLocalProfileActive(): Promise<boolean> {
@@ -60,6 +61,9 @@ export async function getControledMihomoConfig(force = false): Promise<Partial<I
   }
   if (typeof controledMihomoConfig !== 'object')
     controledMihomoConfig = cloneDefaultControledMihomoConfig()
+  // 服务端模式下 allow-lan 由 CLASH_PARTY_ALLOW_LAN 决定（默认 true），
+  // 返回给 UI 的值与运行配置保持一致，避免"开关显示关闭但局域网可连"
+  const serverAllowLan = resolveServerAllowLan()
   if (await isLocalProfileActive()) {
     const { getLocalState } = await import('../local/store')
     const state = await getLocalState()
@@ -84,7 +88,11 @@ export async function getControledMihomoConfig(force = false): Promise<Partial<I
         ;(localConfig as Record<string, unknown>)[module] = structuredClone(value)
       }
     }
+    if (serverAllowLan !== undefined) localConfig['allow-lan'] = serverAllowLan
     return localConfig
+  }
+  if (serverAllowLan !== undefined) {
+    return { ...controledMihomoConfig, 'allow-lan': serverAllowLan }
   }
   return controledMihomoConfig
 }

@@ -26,6 +26,7 @@ import { createLogger } from '../utils/logger'
 import { decryptAgeContent } from '../utils/age'
 import { DEFAULT_CONTROL_DNS, DEFAULT_CONTROL_SNIFF } from '../../shared/appConfig'
 import { atomicWriteFile } from '../utils/safeFile'
+import { resolveServerAllowLan } from '../utils/allowLan'
 import { compileLocalRuntime } from '../local/service'
 import { isLocalProfile } from '../../shared/local-config'
 import { evaluateDnsOverrideGuard, type DnsOverrideGuardResult } from './dnsOverrideGuard'
@@ -205,6 +206,11 @@ export async function generateProfile(
   }
 
   const profile = deepMerge(currentProfile, controledMihomoConfig)
+  // 服务端模式（容器 / serve.mjs）：代理端口默认对局域网开放，这是容器部署的核心
+  // 用法。这里只改本次生成的运行配置，不走内核 patch（init 阶段 patch 会触发内核
+  // 重启并卡住启动）。桌面模式返回 undefined，完全尊重 UI 设置。
+  const serverAllowLan = resolveServerAllowLan()
+  if (serverAllowLan !== undefined) profile['allow-lan'] = serverAllowLan
   // 关闭 DNS 覆写时，如果最终配置没有启用的 DNS 配置，清空 dns-hijack 避免请求被劫持但无法处理
   if (!controlDns && profile.tun && !profile.dns?.enable) {
     profile.tun = { ...profile.tun, 'dns-hijack': [] }

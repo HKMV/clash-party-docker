@@ -338,8 +338,6 @@ interface IAppConfig {
   gistAgeSecretKey?: string
   useSubStore: boolean
   subStoreHost?: string
-  /** 服务端模式一次性迁移标记：已把 allow-lan 迁移为 true（CLASH_PARTY_ALLOW_LAN 未显式设置时） */
-  serverAllowLanMigrated?: boolean
   subStoreBackendSyncCron?: string
   subStoreBackendDownloadCron?: string
   subStoreBackendUploadCron?: string
