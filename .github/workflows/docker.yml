@@ -157,6 +157,41 @@ jobs:
             -H 'Content-Type: application/json' -d '{"password":"smoke-test"}'
           curl -fsS -b /tmp/cookies.txt http://127.0.0.1:8080/ | grep -q 'web-shim.js'
 
+      - name: Verify Sub-Store proxy and preview link
+        run: |
+          set -eux
+          base=http://127.0.0.1:8080
+          # 前端默认后端是官方 https://sub.store，容器里必须被改回同源 /substore
+          curl -fsS -b /tmp/cookies.txt "$base/substore" -o /tmp/substore.html
+          grep -q 'hostAPI' /tmp/substore.html
+          grep -q '<base href="/substore/">' /tmp/substore.html
+          # 同源代理出来的后端要活着
+          curl -fsS -b /tmp/cookies.txt "$base/substore/api/utils/env" | grep -q '"status":"success"'
+          # 造一条"本地内容"类型的单条订阅（以前下载会 500）
+          code=''
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /tmp/create.json -w '%{http_code}' -b /tmp/cookies.txt \
+              -X POST "$base/substore/api/subs" -H 'Content-Type: application/json' \
+              -d '{"name":"smoke-file","displayName":"Smoke File","type":"file","source":"local","content":"proxies:\n  - name: Smoke-A\n    type: ss\n    server: 1.1.1.1\n    port: 443\n    cipher: aes-128-gcm\n    password: smoke\n"}' || true)
+            [ "$code" = "201" ] && break
+            sleep 2
+          done
+          test "$code" = "201"
+          # 下载链接要返回配置本身，而不是 SPA 的 HTML
+          curl -fsS -b /tmp/cookies.txt "$base/substore/download/smoke-file?target=ClashMeta" -o /tmp/smoke.yaml
+          grep -q 'Smoke-A' /tmp/smoke.yaml
+          if grep -q '<!DOCTYPE html>' /tmp/smoke.yaml; then
+            echo "::error::download link returned the SPA page instead of the config"
+            exit 1
+          fi
+          # 预览链接：Sub-Store 分享出去的就是这个形状
+          dl="$base/substore/download/smoke-file?target=ClashMeta"
+          preview="$base/preview?url=$(jq -rn --arg u "$dl" '$u|@uri')&name=Smoke"
+          curl -fsS -b /tmp/cookies.txt "$preview" -o /tmp/preview.html
+          grep -q 'Sub-Store' /tmp/preview.html
+          grep -q '<base href="/substore/">' /tmp/preview.html
+          echo "sub-store proxy, download and preview link OK"
+
       - name: Verify mihomo core inside container
         run: |
           for i in $(seq 1 30); do
