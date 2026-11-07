@@ -237,6 +237,57 @@ const SUB_STORE_ROUTER_SHIM = `<script>
   history.pushState = function (state, title, url) { return push.call(this, state, title, withPrefix(url)) }
   history.replaceState = function (state, title, url) { return replace.call(this, state, title, withPrefix(url)) }
   var path = location.pathname
+  var OFFICIAL = 'https://sub.store'
+  // 前端的"后端"默认值写死成官方 https://sub.store，容器里既出不去也不是本机数据，
+  // 页面会直接显示"数据加载失败 / 请配置自定义后端"。这里把默认后端换成同源 /substore，
+  // 用户自己加过的后端保持不动。
+  try {
+    var KEY = 'hostAPI'
+    var conf = { current: '', apis: [] }
+    var raw = localStorage.getItem(KEY)
+    if (raw) conf = JSON.parse(raw) || conf
+    if (!conf.apis || !conf.apis.length) conf.apis = []
+    var local = null
+    var current = null
+    var k
+    for (k = 0; k < conf.apis.length; k++) {
+      var item = conf.apis[k]
+      if (!item) continue
+      if (item.url === P) local = item
+      if (item.name === conf.current) current = item
+    }
+    if (!local) {
+      var name = '本机'
+      for (var n = 2; n < 100; n++) {
+        var taken = false
+        for (k = 0; k < conf.apis.length; k++) if (conf.apis[k] && conf.apis[k].name === name) taken = true
+        if (!taken) break
+        name = '本机 ' + n
+      }
+      local = { name: name, url: P }
+      conf.apis.push(local)
+    }
+    if (!current || !current.url || String(current.url).indexOf(OFFICIAL) === 0) conf.current = local.name
+    localStorage.setItem(KEY, JSON.stringify(conf))
+  } catch (e) {}
+  // 兜底：已经算出来的官方后端地址也一起改回本机同源接口
+  function mapApi(u) {
+    if (typeof u !== 'string') return u
+    var rest = u.indexOf(OFFICIAL) === 0 ? u.slice(OFFICIAL.length) : null
+    if (rest === null || rest.charAt(0) !== '/') return u
+    return P + rest
+  }
+  var xhrOpen = XMLHttpRequest.prototype.open
+  XMLHttpRequest.prototype.open = function (method, url) {
+    arguments[1] = mapApi(url)
+    return xhrOpen.apply(this, arguments)
+  }
+  var rawFetch = window.fetch
+  if (rawFetch) {
+    window.fetch = function (input, init) {
+      return rawFetch.call(this, typeof input === 'string' ? mapApi(input) : input, init)
+    }
+  }
   if (path.indexOf(P) === 0) {
     // 用原生 replaceState 还原，避免被上面的补前缀逻辑又改回去
     replace.call(history, history.state, '', (path.slice(P.length) || '/') + location.search + location.hash)
@@ -244,7 +295,13 @@ const SUB_STORE_ROUTER_SHIM = `<script>
 })()
 </script>`
 
-/** Sub-Store 前端把主容器限宽 900px 并居中，内嵌在 Web UI 里宽屏下两侧大片留白 */
+/**
+ * Sub-Store 的两处布局在内嵌场景下不合适，这里统一修正：
+ * 1. 主容器限宽 900px 居中，宽屏下两侧大片留白
+ * 2. 侧边栏在窄屏（<1024px）退化成悬浮图标条，展开时盖住内容 —— 内嵌页通常
+ *    只有 900~1100px 宽，正好落在这个区间，看起来像坏掉
+ * 桌面宽度下改成"常驻左栏 + 内容右移"，窄屏（手机）保持原样不动。
+ */
 const SUB_STORE_LAYOUT_SHIM = `<style>
   .nav-bar-wrapper,
   .page-body,
@@ -252,10 +309,47 @@ const SUB_STORE_LAYOUT_SHIM = `<style>
   .add-sub-popup {
     max-width: 100% !important;
   }
+  @media (min-width: 720px) {
+    .side-bar-wrapper {
+      left: 0 !important;
+      right: auto !important;
+      top: 56px !important;
+      bottom: 0 !important;
+      transform: none !important;
+      width: 200px !important;
+      height: auto !important;
+      border-radius: 0 !important;
+      padding: 16px 12px !important;
+      background: var(--background-color, #f7f7f8) !important;
+      box-shadow: none !important;
+      border-right: 1px solid rgba(127, 127, 127, 0.16) !important;
+    }
+    .side-bar-wrapper .sidebar-content {
+      width: 100% !important;
+    }
+    .side-bar-wrapper .menu-item {
+      justify-content: flex-start !important;
+      padding: 10px 12px !important;
+      border-radius: 8px !important;
+    }
+    .side-bar-wrapper .menu-item .label {
+      display: inline !important;
+    }
+    #app .page-body {
+      padding-left: 200px !important;
+      box-sizing: border-box !important;
+    }
+    /* 订阅列表顶部的筛选条是 position:fixed + left:50% 居中的，留出左栏后会被压住一半，
+       这里把它的居中轴挪到内容区，并禁止超出内容宽度 */
+    .radio-wrapper {
+      left: calc(50% + 100px) !important;
+      max-width: calc(100% - 240px) !important;
+    }
+  }
 </style>`
 
 /** 前端 index.html 的资源都写成 `/xxx`，挂到 /substore 下必须补前缀 */
-function rewriteSubStoreHtml(html: string): string {
+function rewriteSubStoreHtml(html: string, baseHref?: string): string {
   return (
     html
       .replace(/(href|src)="\/(?!\/)/g, '$1="/substore/')
@@ -263,7 +357,8 @@ function rewriteSubStoreHtml(html: string): string {
       .replace(/<script[^>]*registerSW\.js[^>]*><\/script>/i, '')
       .replace(
         /<head(\s[^>]*)?>/i,
-        (head) => `${head}\n    ${SUB_STORE_ROUTER_SHIM}\n    ${SUB_STORE_LAYOUT_SHIM}`
+        (head) =>
+          `${head}\n    ${baseHref ? `<base href="${baseHref}">\n    ` : ''}${SUB_STORE_ROUTER_SHIM}\n    ${SUB_STORE_LAYOUT_SHIM}`
       )
   )
 }
@@ -282,7 +377,8 @@ function forwardSubStore(
   res: Response,
   port: number,
   targetPath: string,
-  rewriteHtml: boolean
+  rewriteHtml: boolean,
+  baseHref?: string
 ): void {
   const headers = { ...req.headers, host: `127.0.0.1:${port}` }
   delete headers.origin
@@ -308,7 +404,7 @@ function forwardSubStore(
       const chunks: Buffer[] = []
       upstreamRes.on('data', (chunk: Buffer) => chunks.push(chunk))
       upstreamRes.on('end', () => {
-        const body = rewriteSubStoreHtml(Buffer.concat(chunks).toString('utf-8'))
+        const body = rewriteSubStoreHtml(Buffer.concat(chunks).toString('utf-8'), baseHref)
         delete headers['content-length']
         delete headers['transfer-encoding']
         res.writeHead(upstreamRes.statusCode ?? 200, headers)
@@ -344,7 +440,14 @@ function registerSubStoreProxy(app: Express, requireAuth: RequestHandler): void 
   const frontendHandler = async (req: Request, res: Response): Promise<void> => {
     const { frontend, backend } = await subStorePorts()
     const target = req.url || '/'
-    if (target === '/api' || target.startsWith('/api/')) {
+    // 后端除了 /api/*，还直接挂了订阅下载/分享路由 /download/:name、/download/collection/:name。
+    // 这些以前被当成前端页面转发，分享出去或填进客户端的链接拿到的是一张 HTML，必须交给后端。
+    const isBackend =
+      target === '/api' ||
+      target.startsWith('/api/') ||
+      target === '/download' ||
+      target.startsWith('/download')
+    if (isBackend) {
       if (!backend) {
         res.status(503).json({ ok: false, error: 'Sub-Store 后端未启动' })
         return
@@ -356,10 +459,26 @@ function registerSubStoreProxy(app: Express, requireAuth: RequestHandler): void 
       res.status(503).json({ ok: false, error: 'Sub-Store 前端未启动' })
       return
     }
-    forwardSubStore(req, res, frontend, target, true)
+    // SPA 内部的接口调用是相对路径 `api/...`。访问 `/substore`（无尾部斜杠）时浏览器会
+    // 把它解析成 `/api/...` 打到本服务自己的接口上，页面报"数据加载失败"。固定一个
+    // <base href="/substore/"> 后，任何深度的页面都能正确解析到 /substore/api/*。
+    forwardSubStore(req, res, frontend, target, true, '/substore/')
   }
 
   app.use('/substore', requireAuth, frontendHandler)
+
+  // Sub-Store 生成的分享/预览链接是 `<origin>/preview?url=...&name=...`（前端本地路由，
+  // 不带 /substore 前缀）。这里补一条同源路由交给前端 SPA，否则直接落到本服务 404，
+  // 页面显示 "Cannot GET /preview"。SPA 里的接口调用是相对路径 `api/...`，需要用
+  // <base href="/substore/"> 让它仍然解析到 /substore/api/*。
+  app.get('/preview', requireAuth, async (req: Request, res: Response): Promise<void> => {
+    const { frontend } = await subStorePorts()
+    if (!frontend) {
+      res.status(503).type('text/plain').send('Sub-Store 前端未启动')
+      return
+    }
+    forwardSubStore(req, res, frontend, '/', true, '/substore/')
+  })
 
   for (const mount of SUB_STORE_ASSET_MOUNTS) {
     app.use(mount, requireAuth, async (req: Request, res: Response): Promise<void> => {
