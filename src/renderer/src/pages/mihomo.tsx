@@ -1171,7 +1171,7 @@ const Mihomo: React.FC = () => {
             title={t('mihomo.allowLanConnection')}
             actions={
               isWebMode ? (
-                <span className="text-xs text-default-400">{t('mihomo.allowLanWebHint')}</span>
+                <span className="ml-2 text-xs text-default-400">{t('mihomo.allowLanWebHint')}</span>
               ) : (
                 <Button
                   size="sm"
