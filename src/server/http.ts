@@ -340,10 +340,11 @@ const SUB_STORE_LAYOUT_SHIM = `<style>
       box-sizing: border-box !important;
     }
     /* 订阅列表顶部的筛选条是 position:fixed + left:50% 居中的，留出左栏后会被压住一半，
-       这里把它的居中轴挪到内容区，并禁止超出内容宽度 */
-    .radio-wrapper {
+       这里把它的居中轴挪到内容区，并禁止超出内容宽度。注意只在订阅列表容器内生效：
+       "我的"等页面里同名的 radio-wrapper 是页面内的表单项，不能一起位移。 */
+    .subs-list-wrapper .radio-wrapper {
       left: calc(50% + 100px) !important;
-      max-width: calc(100% - 240px) !important;
+      max-width: min(900px, calc(100% - 240px)) !important;
     }
   }
 </style>`
