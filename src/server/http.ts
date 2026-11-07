@@ -244,6 +244,16 @@ const SUB_STORE_ROUTER_SHIM = `<script>
 })()
 </script>`
 
+/** Sub-Store 前端把主容器限宽 900px 并居中，内嵌在 Web UI 里宽屏下两侧大片留白 */
+const SUB_STORE_LAYOUT_SHIM = `<style>
+  .nav-bar-wrapper,
+  .page-body,
+  .app-layout-wrapper,
+  .add-sub-popup {
+    max-width: 100% !important;
+  }
+</style>`
+
 /** 前端 index.html 的资源都写成 `/xxx`，挂到 /substore 下必须补前缀 */
 function rewriteSubStoreHtml(html: string): string {
   return (
@@ -251,7 +261,10 @@ function rewriteSubStoreHtml(html: string): string {
       .replace(/(href|src)="\/(?!\/)/g, '$1="/substore/')
       // PWA 的 service worker 作用域会覆盖整个站点，嵌在 iframe 里没有必要，去掉
       .replace(/<script[^>]*registerSW\.js[^>]*><\/script>/i, '')
-      .replace(/<head(\s[^>]*)?>/i, (head) => `${head}\n    ${SUB_STORE_ROUTER_SHIM}`)
+      .replace(
+        /<head(\s[^>]*)?>/i,
+        (head) => `${head}\n    ${SUB_STORE_ROUTER_SHIM}\n    ${SUB_STORE_LAYOUT_SHIM}`
+      )
   )
 }
 
@@ -271,13 +284,18 @@ function forwardSubStore(
   targetPath: string,
   rewriteHtml: boolean
 ): void {
+  const headers = { ...req.headers, host: `127.0.0.1:${port}` }
+  delete headers.origin
   const upstream = http.request(
     {
       host: '127.0.0.1',
       port,
       path: targetPath,
       method: req.method,
-      headers: { ...req.headers, host: `127.0.0.1:${port}` }
+      // 浏览器的同源请求也会带 Origin，Sub-Store 后端会按 CORS 白名单校验并
+      // 直接 403（CORS origin not allowed）。请求经同源代理转发后来源已经是
+      // 本机服务，这里剥离 Origin，让后端按非浏览器请求放行，白名单不用放宽。
+      headers
     },
     (upstreamRes) => {
       const headers = { ...upstreamRes.headers }
