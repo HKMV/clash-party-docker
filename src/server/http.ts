@@ -367,9 +367,22 @@ function rewriteSubStoreHtml(html: string, baseHref?: string): string {
 /**
  * 主进程模块在 HTTP 服务启动之后才加载，Sub-Store 的端口也是运行时才分配的
  * （前端 14122 起、后端 38324 起，取第一个空闲端口），所以每次请求时再读。
+ *
+ * 服务是开机后异步拉起的，容器里 Web UI 可能先就绪。分享出去的 /preview、/download
+ * 链接在服务还没起来时会拿到 503，所以端口缺失时这里按需启动一次再读。是否启用
+ * Sub-Store 由配置决定，没启用时仍然是 503，提示语不变。
  */
 async function subStorePorts(): Promise<{ frontend?: number; backend?: number }> {
   const mod = await import('../main/resolve/server')
+  if (mod.subStoreFrontendPort && mod.subStorePort) {
+    return { frontend: mod.subStoreFrontendPort, backend: mod.subStorePort }
+  }
+  try {
+    const init = await import('../main/utils/init')
+    await init.startSubStoreServices()
+  } catch {
+    // 启动失败按未启动处理，交给调用方返回 503
+  }
   return { frontend: mod.subStoreFrontendPort, backend: mod.subStorePort }
 }
 
@@ -383,44 +396,59 @@ function forwardSubStore(
 ): void {
   const headers = { ...req.headers, host: `127.0.0.1:${port}` }
   delete headers.origin
-  const upstream = http.request(
-    {
-      host: '127.0.0.1',
-      port,
-      path: targetPath,
-      method: req.method,
-      // 浏览器的同源请求也会带 Origin，Sub-Store 后端会按 CORS 白名单校验并
-      // 直接 403（CORS origin not allowed）。请求经同源代理转发后来源已经是
-      // 本机服务，这里剥离 Origin，让后端按非浏览器请求放行，白名单不用放宽。
-      headers
-    },
-    (upstreamRes) => {
-      const headers = { ...upstreamRes.headers }
-      const isHtml = String(headers['content-type'] ?? '').includes('text/html')
-      if (!rewriteHtml || !isHtml) {
-        res.writeHead(upstreamRes.statusCode ?? 502, headers)
-        upstreamRes.pipe(res)
+  // 无请求体的请求可以安全重发：后端子进程刚拉起来时端口已经分配、监听还没就绪，
+  // 直接 502 会让内嵌页弹一堆"数据加载失败"。带请求体的（POST/PUT）只试一次。
+  const canRetry = req.method === 'GET' || req.method === 'HEAD'
+  const maxAttempts = canRetry ? 20 : 1
+  const attempt = (round: number): void => {
+    const upstream = http.request(
+      {
+        host: '127.0.0.1',
+        port,
+        path: targetPath,
+        method: req.method,
+        // 浏览器的同源请求也会带 Origin，Sub-Store 后端会按 CORS 白名单校验并
+        // 直接 403（CORS origin not allowed）。请求经同源代理转发后来源已经是
+        // 本机服务，这里剥离 Origin，让后端按非浏览器请求放行，白名单不用放宽。
+        headers
+      },
+      (upstreamRes) => {
+        const headers = { ...upstreamRes.headers }
+        const isHtml = String(headers['content-type'] ?? '').includes('text/html')
+        if (!rewriteHtml || !isHtml) {
+          res.writeHead(upstreamRes.statusCode ?? 502, headers)
+          upstreamRes.pipe(res)
+          return
+        }
+        const chunks: Buffer[] = []
+        upstreamRes.on('data', (chunk: Buffer) => chunks.push(chunk))
+        upstreamRes.on('end', () => {
+          const body = rewriteSubStoreHtml(Buffer.concat(chunks).toString('utf-8'), baseHref)
+          delete headers['content-length']
+          delete headers['transfer-encoding']
+          res.writeHead(upstreamRes.statusCode ?? 200, headers)
+          res.end(body)
+        })
+      }
+    )
+    upstream.on('error', (error) => {
+      if (res.headersSent) {
+        res.end()
         return
       }
-      const chunks: Buffer[] = []
-      upstreamRes.on('data', (chunk: Buffer) => chunks.push(chunk))
-      upstreamRes.on('end', () => {
-        const body = rewriteSubStoreHtml(Buffer.concat(chunks).toString('utf-8'), baseHref)
-        delete headers['content-length']
-        delete headers['transfer-encoding']
-        res.writeHead(upstreamRes.statusCode ?? 200, headers)
-        res.end(body)
-      })
-    }
-  )
-  upstream.on('error', (error) => {
-    if (res.headersSent) {
-      res.end()
+      if (round < maxAttempts) {
+        setTimeout(() => attempt(round + 1), 300)
+        return
+      }
+      res.status(502).json({ ok: false, error: `Sub-Store 未就绪：${error.message}` })
+    })
+    if (canRetry) {
+      upstream.end()
       return
     }
-    res.status(502).json({ ok: false, error: `Sub-Store 未就绪：${error.message}` })
-  })
-  req.pipe(upstream)
+    req.pipe(upstream)
+  }
+  attempt(1)
 }
 
 /**
