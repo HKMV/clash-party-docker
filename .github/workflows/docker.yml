@@ -165,8 +165,8 @@ jobs:
           curl -fsS -b /tmp/cookies.txt "$base/substore" -o /tmp/substore.html
           grep -q 'hostAPI' /tmp/substore.html
           grep -q '<base href="/substore/">' /tmp/substore.html
-          # 同源代理出来的后端要活着
-          curl -fsS -b /tmp/cookies.txt "$base/substore/api/utils/env" | grep -q '"status":"success"'
+          # 同源代理出来的后端要活着（后端返回的是带缩进的 JSON）
+          curl -fsS -b /tmp/cookies.txt "$base/substore/api/utils/env" | grep -q '"status": *"success"'
           # 造一条"本地内容"类型的单条订阅（以前下载会 500）
           code=''
           for i in $(seq 1 30); do
