@@ -20,12 +20,15 @@ import { CSS } from '@dnd-kit/utilities'
 import {
   exportLocalConfig,
   getLocalConfig,
+  getProfileStr,
   openFile,
   removeLocalSource,
   saveLocalDraft,
+  setProfileStr,
   updatePluginProfile
 } from '@renderer/utils/ipc'
 import { parse, stringify } from 'yaml'
+import { showError } from '@renderer/utils/error-display'
 import { toast } from '@renderer/components/base/toast'
 import { useProfileConfig } from '@renderer/hooks/use-profile-config'
 import { useTranslation } from 'react-i18next'
@@ -212,12 +215,12 @@ const ProfileItem: React.FC<Props> = (props) => {
         break
       }
       case 'local-nodes': {
-        if (!isCurrent) await changeCurrentProfile(info.id)
+        if (!isCurrent && !(await changeCurrentProfile(info.id))) break
         setOpenLocalNodes(true)
         break
       }
       case 'local-export': {
-        if (!isCurrent) await changeCurrentProfile(info.id)
+        if (!isCurrent && !(await changeCurrentProfile(info.id))) break
         try {
           const result = await exportLocalConfig()
           if (result.path) toast.success(result.path)
@@ -410,31 +413,44 @@ const ProfileItem: React.FC<Props> = (props) => {
             isSource={isSource}
             actions={
               <div className="flex">
-                {(info.type === 'remote' || info.pluginId) && (
-                  <Tooltip placement="left" content={dayjs(info.updated).fromNow()}>
-                    <Button
-                      isIconOnly
-                      size="sm"
-                      variant="light"
+                <Tooltip
+                  placement="left"
+                  content={
+                    info.type === 'local' && !info.pluginId
+                      ? t('common.error.reload')
+                      : dayjs(info.updated).fromNow()
+                  }
+                >
+                  <Button
+                    isIconOnly
+                    aria-label={
+                      info.type === 'local' && !info.pluginId
+                        ? t('common.error.reload')
+                        : t('common.refresh')
+                    }
+                    size="sm"
+                    variant="light"
+                    color="default"
+                    isDisabled={updating}
+                    onPress={async () => {
+                      try {
+                        setUpdating(true)
+                        if (info.type === 'remote') await addProfileItem(info)
+                        else if (info.pluginId) await updatePluginProfile(info.pluginId, true)
+                        else await setProfileStr(info.id, await getProfileStr(info.id))
+                      } catch (error) {
+                        await showError(error, t('common.error.updateProfileFailed'))
+                      } finally {
+                        setUpdating(false)
+                      }
+                    }}
+                  >
+                    <IoMdRefresh
                       color="default"
-                      disabled={updating}
-                      onPress={async () => {
-                        try {
-                          setUpdating(true)
-                          if (info.type === 'remote') await addProfileItem(info)
-                          else if (info.pluginId) await updatePluginProfile(info.pluginId, true)
-                        } finally {
-                          setUpdating(false)
-                        }
-                      }}
-                    >
-                      <IoMdRefresh
-                        color="default"
-                        className={`${isCurrent ? 'text-primary-foreground' : 'text-foreground'} text-[24px] ${updating ? 'animate-spin' : ''}`}
-                      />
-                    </Button>
-                  </Tooltip>
-                )}
+                      className={`${isCurrent ? 'text-primary-foreground' : 'text-foreground'} text-[24px] ${updating ? 'animate-spin' : ''}`}
+                    />
+                  </Button>
+                </Tooltip>
 
                 <Dropdown isOpen={dropdownOpen} onOpenChange={setDropdownOpen}>
                   <DropdownTrigger>
