@@ -41,6 +41,7 @@ const validInvokeChannels = [
   'takeDnsOverrideAutoDisabledNotice',
   'resetAppConfig',
   // Profile
+  'localSwitchNeedsDnsConfirm',
   'getProfileConfig',
   'setProfileConfig',
   'getCurrentProfileItem',
@@ -206,6 +207,10 @@ const validListenChannels = [
   'groupsUpdated',
   'rulesUpdated',
   'localConfigUpdated',
+  'overrideConfigUpdated',
+  'proxyProvidersUpdated',
+  'ruleProvidersUpdated',
+  'core-started',
   'updateDownloadProgress',
   'pluginConfigUpdated',
   'openPluginFile',
