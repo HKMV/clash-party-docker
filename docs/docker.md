@@ -337,11 +337,20 @@ devices:
 3. 仍有没解决的冲突 → 把合并结果推到 `sync/upstream` 分支，开一条**草稿** PR，
    冲突标记原样保留，`smart_core` 与镜像都不动；
 4. 没有冲突 → 安装依赖并跑 `format:check` / `lint:check` / `typecheck`；
-5. 全部通过 → 推送 `smart_core`，显式触发 [Docker](../.github/workflows/docker.yml) 构建并推送到 GHCR，
-   镜像额外带 `upstream-<版本>-<上游短哈希>` 标签，例如 `upstream-2.0.4-acae711`。
+5. 全部通过 → 推送 `smart_core`，[Docker](../.github/workflows/docker.yml) 的 push 触发会照常构建并推送到 GHCR。
 
-推送用的是 `GITHUB_TOKEN`，按 GitHub 的规则不会连带触发 `docker.yml`，所以镜像是另外
-`workflow_dispatch` 出去的，一次同步只会构建一次。
+### 需要的仓库配置
+
+- **Settings → Actions → General → Workflow permissions**：选 _Read and write permissions_，
+  并勾上 **Allow GitHub Actions to create and approve pull requests**（开草稿 PR 用得到）。
+- **Secrets → SYNC_TOKEN**：带 `workflow` 权限的 PAT。上游提交经常改动 `.github/workflows/*`，
+  而 `GITHUB_TOKEN` 没有 workflows 权限，推送会被拒绝：
+  `refusing to allow a GitHub App to create or update workflow ... without workflows permission`。
+  经典 PAT 勾 `repo` + `workflow`；fine-grained PAT 给 Contents（读写）、Pull requests（读写）、
+  Workflows（读写）。预演不校验这个 token，只有真正推送时才需要。
+
+用 PAT 推送后 `docker.yml` 的 push 触发会正常工作，所以同步 workflow 不再单独派发构建，
+一次同步只会构建一次。
 
 ### 手动触发
 
@@ -350,7 +359,6 @@ Actions → **Sync Upstream** → _Run workflow_：
 | 输入                  | 说明                                                 |
 | --------------------- | ---------------------------------------------------- |
 | `apply`               | 取消勾选只做预演：报告哪些文件会冲突，不改动任何分支 |
-| `publish`             | 合并成功后是否触发镜像构建                           |
 | `upstream_repository` | 上游仓库，默认 `mihomo-party-org/clash-party`        |
 | `upstream_branch`     | 上游分支，默认 `smart_core`                          |
 

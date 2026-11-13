@@ -112,11 +112,14 @@ docker run -d --name clash-party \
 上游 [mihomo-party-org/clash-party](https://github.com/mihomo-party-org/clash-party) 的 `smart_core`
 每天由 [Sync Upstream](.github/workflows/sync-upstream.yml) 自动合并进来：
 
-- **没有冲突** → 先跑 `format:check` / `lint:check` / `typecheck`，通过后推 `smart_core` 并自动发布镜像，
-  镜像带 `upstream-<版本>-<短哈希>` 标签，方便回溯到具体上游提交
+- **没有冲突** → 先跑 `format:check` / `lint:check` / `typecheck`，通过后推 `smart_core`，
+  由 docker.yml 的 push 触发自动构建并发布镜像
 - **有冲突** → 合并结果推到 `sync/upstream` 分支并开一条草稿 PR，主干和镜像都不动，人工解决后再合并
 - 本分支独有的文件（Dockerfile、compose、服务端代码等）列在
   [.github/sync/keep-local.txt](.github/sync/keep-local.txt)，冲突时直接保留本地版本
+
+推送用 `SYNC_TOKEN`（带 `workflow` 权限的 PAT）：上游提交经常改动 `.github/workflows/*`，
+而 `GITHUB_TOKEN` 没有 workflows 权限，push 会被 GitHub 直接拒绝。
 
 手动触发、本地预演与冲突处理流程见 [docs/docker.md](docs/docker.md#上游同步与镜像发布)。
 

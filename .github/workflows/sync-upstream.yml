@@ -3,10 +3,11 @@ name: Sync Upstream
 # 自动跟进上游 Clash Party：
 #   1. 拉取上游分支，合并进本仓库的服务化分支；
 #   2. 冲突按 .github/sync/keep-local.txt 处理，剩下的转成草稿 PR；
-#   3. 合并后的代码先跑 format/lint/typecheck，通过才推送并触发镜像构建。
+#   3. 合并后的代码先跑 format/lint/typecheck，通过才推送。
 #
-# 推送用的是 GITHUB_TOKEN，按 GitHub 的规则不会连带触发 docker.yml，
-# 所以镜像构建是这里显式 workflow_dispatch 出去的，一次同步只会构建一次。
+# 推送必须用 SYNC_TOKEN（PAT），不能用 GITHUB_TOKEN：上游提交经常改动
+# .github/workflows/*，而 GITHUB_TOKEN 没有 workflows 权限，push 会被直接拒绝。
+# 用 PAT 推送后，docker.yml 的 push 触发会照常构建并发布镜像。
 
 on:
   schedule:
@@ -26,14 +27,9 @@ on:
         description: 真正写入（取消勾选只做预演，不改动分支）
         type: boolean
         default: true
-      publish:
-        description: 合并成功后触发镜像构建
-        type: boolean
-        default: true
 
 permissions:
   contents: write
-  actions: write
   pull-requests: write
 
 concurrency:
@@ -45,7 +41,6 @@ env:
   UPSTREAM_BRANCH: ${{ inputs.upstream_branch || 'smart_core' }}
   TARGET_BRANCH: smart_core
   CONFLICT_BRANCH: sync/upstream
-  IMAGE_WORKFLOW: docker.yml
 
 jobs:
   sync:
@@ -55,7 +50,6 @@ jobs:
     outputs:
       status: ${{ steps.finalize.outputs.status }}
       applied: ${{ steps.finalize.outputs.applied }}
-      image_suffix: ${{ steps.finalize.outputs.image_suffix }}
       incoming_commits: ${{ steps.finalize.outputs.incoming_commits }}
     steps:
       - name: Checkout
@@ -63,6 +57,8 @@ jobs:
         with:
           ref: ${{ env.TARGET_BRANCH }}
           fetch-depth: 0
+          # 推送同步结果需要 workflows 权限，只能由 PAT 提供
+          token: ${{ secrets.SYNC_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -81,7 +77,8 @@ jobs:
       - name: Merge upstream
         id: sync
         env:
-          SYNC_APPLY: ${{ github.event_name == 'schedule' || inputs.apply }}
+          # inputs.apply 是 boolean；用 API 派发时可能传成字符串，两种都要认
+          SYNC_APPLY: ${{ github.event_name == 'schedule' || inputs.apply == true || inputs.apply == 'true' }}
         run: |
           set -euo pipefail
           args=(
@@ -120,7 +117,6 @@ jobs:
           SYNC_APPLIED: ${{ steps.sync.outputs.applied }}
           INSTALL_OUTCOME: ${{ steps.install.outcome }}
           CHECK_OUTCOME: ${{ steps.checks.outcome }}
-          IMAGE_SUFFIX: ${{ steps.sync.outputs.image_suffix }}
           INCOMING_COMMITS: ${{ steps.sync.outputs.incoming_commits }}
         run: |
           set -euo pipefail
@@ -131,10 +127,20 @@ jobs:
           {
             echo "status=$status"
             echo "applied=$SYNC_APPLIED"
-            echo "image_suffix=$IMAGE_SUFFIX"
             echo "incoming_commits=$INCOMING_COMMITS"
           } >> "$GITHUB_OUTPUT"
           echo "同步结果：${status:-unknown}（上游新增 ${INCOMING_COMMITS:-0} 个提交）"
+
+      - name: Verify push token
+        if: steps.finalize.outputs.applied == 'true' && steps.finalize.outputs.status != 'up-to-date'
+        env:
+          SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SYNC_TOKEN" ]; then
+            echo "::error::缺少 SYNC_TOKEN。上游提交会改动 .github/workflows/*，GITHUB_TOKEN 没有 workflows 权限，push 会被拒绝。请创建带 workflow 权限的 PAT 并保存为仓库 secret SYNC_TOKEN。"
+            exit 1
+          fi
 
       - name: Push merged commit
         if: steps.finalize.outputs.status == 'merged' && steps.finalize.outputs.applied == 'true'
@@ -143,7 +149,7 @@ jobs:
       - name: Publish pull request
         if: (steps.finalize.outputs.status == 'conflict' || steps.finalize.outputs.status == 'blocked') && steps.finalize.outputs.applied == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.SYNC_TOKEN || secrets.GITHUB_TOKEN }}
           STATUS: ${{ steps.finalize.outputs.status }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
@@ -178,48 +184,3 @@ jobs:
             --head "$CONFLICT_BRANCH" \
             --title "$title" \
             --body-file "$body"
-
-  publish:
-    name: Publish image
-    needs: sync
-    if: needs.sync.outputs.status == 'merged' && needs.sync.outputs.applied == 'true' && (github.event_name == 'schedule' || inputs.publish)
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
-    permissions:
-      contents: read
-      packages: read
-      actions: write
-    steps:
-      - name: Trigger docker workflow
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          IMAGE_SUFFIX: ${{ needs.sync.outputs.image_suffix }}
-        run: |
-          set -euo pipefail
-          before=$(gh run list --workflow "$IMAGE_WORKFLOW" --branch "$TARGET_BRANCH" \
-            --limit 1 --json databaseId --jq '.[0].databaseId // empty')
-
-          if [ -n "$IMAGE_SUFFIX" ]; then
-            gh workflow run "$IMAGE_WORKFLOW" --ref "$TARGET_BRANCH" -f "extra_tag=$IMAGE_SUFFIX"
-          else
-            gh workflow run "$IMAGE_WORKFLOW" --ref "$TARGET_BRANCH"
-          fi
-          echo "已触发 ${IMAGE_WORKFLOW}，镜像附加标签：${IMAGE_SUFFIX:-无}"
-
-          run_id=""
-          for _ in $(seq 1 60); do
-            current=$(gh run list --workflow "$IMAGE_WORKFLOW" --branch "$TARGET_BRANCH" \
-              --limit 1 --json databaseId --jq '.[0].databaseId // empty')
-            if [ -n "$current" ] && [ "$current" != "$before" ]; then
-              run_id="$current"
-              break
-            fi
-            sleep 10
-          done
-
-          if [ -z "$run_id" ]; then
-            echo "::error::没有等到镜像构建启动，请手动触发 ${IMAGE_WORKFLOW}"
-            exit 1
-          fi
-
-          gh run watch "$run_id" --interval 30 --exit-status

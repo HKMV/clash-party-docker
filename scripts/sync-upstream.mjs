@@ -395,7 +395,7 @@ function writeStepSummary(summary) {
     `| 冲突文件 | ${summary.unresolved.length ? summary.unresolved.map((file) => `\`${file}\``).join('、') : '无'} |`,
     `| 自动处理 | ${summary.autoResolved.length ? summary.autoResolved.map((item) => `\`${item.file}\``).join('、') : '无'} |`,
     `| 合并提交 | \`${summary.mergeCommit || '-'}\` |`,
-    `| 镜像标签 | \`${summary.imageSuffix || '-'}\` |`
+    `| 上游版本 | \`${summary.version || '-'}\` |`
   ]
 
   appendFileSync(file, `${rows.join('\n')}\n\n`, 'utf8')
@@ -416,7 +416,6 @@ function writeOutputs(summary) {
     unresolved: summary.unresolved.join(','),
     merge_commit: summary.mergeCommit,
     version: summary.version,
-    image_suffix: summary.imageSuffix,
     conflict_branch: summary.conflictBranch
   }
 
@@ -444,8 +443,7 @@ function sync(options) {
     autoResolved: [],
     unresolved: [],
     mergeCommit: '',
-    version: readVersion(),
-    imageSuffix: ''
+    version: readVersion()
   }
 
   ensureCleanWorktree()
@@ -486,9 +484,6 @@ function sync(options) {
 
   summary.unresolved = unresolved
   summary.version = readVersion()
-  summary.imageSuffix = summary.version
-    ? `upstream-${summary.version}-${summary.upstreamSha.slice(0, 7)}`
-    : `upstream-${summary.upstreamSha.slice(0, 7)}`
 
   if (unresolved.length > 0) {
     if (!options.apply) {
