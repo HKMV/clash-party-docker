@@ -1,0 +1,225 @@
+name: Sync Upstream
+
+# 自动跟进上游 Clash Party：
+#   1. 拉取上游分支，合并进本仓库的服务化分支；
+#   2. 冲突按 .github/sync/keep-local.txt 处理，剩下的转成草稿 PR；
+#   3. 合并后的代码先跑 format/lint/typecheck，通过才推送并触发镜像构建。
+#
+# 推送用的是 GITHUB_TOKEN，按 GitHub 的规则不会连带触发 docker.yml，
+# 所以镜像构建是这里显式 workflow_dispatch 出去的，一次同步只会构建一次。
+
+on:
+  schedule:
+    # 每天 UTC 18:30（北京时间 02:30），上游的开发时段已经过去
+    - cron: '30 18 * * *'
+  workflow_dispatch:
+    inputs:
+      upstream_repository:
+        description: 上游仓库（owner/repo）
+        required: false
+        default: mihomo-party-org/clash-party
+      upstream_branch:
+        description: 上游分支
+        required: false
+        default: smart_core
+      apply:
+        description: 真正写入（取消勾选只做预演，不改动分支）
+        type: boolean
+        default: true
+      publish:
+        description: 合并成功后触发镜像构建
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  actions: write
+  pull-requests: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_REPOSITORY: ${{ inputs.upstream_repository || 'mihomo-party-org/clash-party' }}
+  UPSTREAM_BRANCH: ${{ inputs.upstream_branch || 'smart_core' }}
+  TARGET_BRANCH: smart_core
+  CONFLICT_BRANCH: sync/upstream
+  IMAGE_WORKFLOW: docker.yml
+
+jobs:
+  sync:
+    name: Merge upstream
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      status: ${{ steps.finalize.outputs.status }}
+      applied: ${{ steps.finalize.outputs.applied }}
+      image_suffix: ${{ steps.finalize.outputs.image_suffix }}
+      incoming_commits: ${{ steps.finalize.outputs.incoming_commits }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.TARGET_BRANCH }}
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Configure git identity
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+      - name: Merge upstream
+        id: sync
+        env:
+          SYNC_APPLY: ${{ github.event_name == 'schedule' || inputs.apply }}
+        run: |
+          set -euo pipefail
+          args=(
+            --upstream-repo="$UPSTREAM_REPOSITORY"
+            --upstream-branch="$UPSTREAM_BRANCH"
+            --conflict-branch="$CONFLICT_BRANCH"
+          )
+          if [ "$SYNC_APPLY" = "true" ]; then
+            args+=(--apply)
+          else
+            args+=(--dry-run)
+          fi
+          node scripts/sync-upstream.mjs "${args[@]}"
+
+      - name: Install dependencies
+        id: install
+        if: steps.sync.outputs.status == 'merged' && steps.sync.outputs.applied == 'true'
+        continue-on-error: true
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Preflight checks
+        id: checks
+        if: steps.install.outcome == 'success'
+        continue-on-error: true
+        run: |
+          pnpm run format:check
+          pnpm run lint:check
+          pnpm run typecheck
+
+      # 合并成功但依赖安装 / 检查没过时，同样不能直接推主干，改用草稿 PR 收口。
+      - name: Finalize status
+        id: finalize
+        if: always()
+        env:
+          SYNC_STATUS: ${{ steps.sync.outputs.status }}
+          SYNC_APPLIED: ${{ steps.sync.outputs.applied }}
+          INSTALL_OUTCOME: ${{ steps.install.outcome }}
+          CHECK_OUTCOME: ${{ steps.checks.outcome }}
+          IMAGE_SUFFIX: ${{ steps.sync.outputs.image_suffix }}
+          INCOMING_COMMITS: ${{ steps.sync.outputs.incoming_commits }}
+        run: |
+          set -euo pipefail
+          status="$SYNC_STATUS"
+          if [ "$status" = "merged" ] && { [ "$INSTALL_OUTCOME" = "failure" ] || [ "$CHECK_OUTCOME" = "failure" ]; }; then
+            status="blocked"
+          fi
+          {
+            echo "status=$status"
+            echo "applied=$SYNC_APPLIED"
+            echo "image_suffix=$IMAGE_SUFFIX"
+            echo "incoming_commits=$INCOMING_COMMITS"
+          } >> "$GITHUB_OUTPUT"
+          echo "同步结果：${status:-unknown}（上游新增 ${INCOMING_COMMITS:-0} 个提交）"
+
+      - name: Push merged commit
+        if: steps.finalize.outputs.status == 'merged' && steps.finalize.outputs.applied == 'true'
+        run: git push origin "HEAD:${TARGET_BRANCH}"
+
+      - name: Publish pull request
+        if: (steps.finalize.outputs.status == 'conflict' || steps.finalize.outputs.status == 'blocked') && steps.finalize.outputs.applied == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STATUS: ${{ steps.finalize.outputs.status }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          body="$RUNNER_TEMP/sync-upstream-pr-body.md"
+
+          if [ "$STATUS" = "blocked" ]; then
+            {
+              printf '\n## 合并后检查未通过\n\n'
+              printf '`pnpm run format:check && pnpm run lint:check && pnpm run typecheck` 在这条分支上失败，'
+              printf '报错见 [同步运行日志](%s)。修好后可直接合并本 PR。\n' "$RUN_URL"
+              printf '\n依赖有变化时先执行 `pnpm install`，让锁文件与 package.json 对齐。\n'
+            } >> "$body"
+            title="⚠️ 上游同步：$(date -u +%Y%m%d) 合并后检查未通过"
+          else
+            title="⚠️ 上游同步：$(date -u +%Y%m%d) 有文件需要人工解决冲突"
+          fi
+
+          # 上一次的 PR 还挂着时不要覆盖分支，避免冲掉正在进行的解决工作。
+          existing=$(gh pr list --head "$CONFLICT_BRANCH" --state open --json number \
+            --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh pr comment "$existing" --body-file "$body"
+            echo "已有待处理的 PR #$existing，本次只追加说明，不覆盖分支。"
+            exit 0
+          fi
+
+          git push --force origin "HEAD:refs/heads/${CONFLICT_BRANCH}"
+          gh pr create \
+            --draft \
+            --base "$TARGET_BRANCH" \
+            --head "$CONFLICT_BRANCH" \
+            --title "$title" \
+            --body-file "$body"
+
+  publish:
+    name: Publish image
+    needs: sync
+    if: needs.sync.outputs.status == 'merged' && needs.sync.outputs.applied == 'true' && (github.event_name == 'schedule' || inputs.publish)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      packages: read
+      actions: write
+    steps:
+      - name: Trigger docker workflow
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE_SUFFIX: ${{ needs.sync.outputs.image_suffix }}
+        run: |
+          set -euo pipefail
+          before=$(gh run list --workflow "$IMAGE_WORKFLOW" --branch "$TARGET_BRANCH" \
+            --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+
+          if [ -n "$IMAGE_SUFFIX" ]; then
+            gh workflow run "$IMAGE_WORKFLOW" --ref "$TARGET_BRANCH" -f "extra_tag=$IMAGE_SUFFIX"
+          else
+            gh workflow run "$IMAGE_WORKFLOW" --ref "$TARGET_BRANCH"
+          fi
+          echo "已触发 ${IMAGE_WORKFLOW}，镜像附加标签：${IMAGE_SUFFIX:-无}"
+
+          run_id=""
+          for _ in $(seq 1 60); do
+            current=$(gh run list --workflow "$IMAGE_WORKFLOW" --branch "$TARGET_BRANCH" \
+              --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+            if [ -n "$current" ] && [ "$current" != "$before" ]; then
+              run_id="$current"
+              break
+            fi
+            sleep 10
+          done
+
+          if [ -z "$run_id" ]; then
+            echo "::error::没有等到镜像构建启动，请手动触发 ${IMAGE_WORKFLOW}"
+            exit 1
+          fi
+
+          gh run watch "$run_id" --interval 30 --exit-status

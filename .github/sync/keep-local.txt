@@ -1,0 +1,15 @@
+# 同步上游时，冲突一律保留本地版本的文件。
+#
+# 这里只放「本分支自己写、上游几乎不可能改」的文件：命中后脚本会直接
+# `git checkout --ours` 并继续合并，不会把整个同步卡在一次人工合并上。
+# 语法是 gitignore 风格的 glob（`*` 只匹配一级，`**` 匹配任意层级）。
+# 反过来的文件（上游是唯一来源）不要写在这里，正常合并即可。
+#
+# 新增服务端专属文件后，记得同步追加到本清单。
+Dockerfile
+docker-compose.yml
+.env.example
+.dockerignore
+README.md
+docs/docker.md
+.github/**

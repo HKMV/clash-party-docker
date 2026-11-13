@@ -321,6 +321,59 @@ devices:
 - **首次启动会生成默认配置**：`/data` 为空时自动写入 `config.yaml`、`mihomo.yaml` 等默认文件，
   日志里会出现 `[web] Clash Party 服务已启动` 与 `[manager] Core ready`。
 
+## 上游同步与镜像发布
+
+本仓库是 Clash Party 的服务化分支，上游是
+[mihomo-party-org/clash-party](https://github.com/mihomo-party-org/clash-party) 的 `smart_core` 分支。
+[Sync Upstream](../.github/workflows/sync-upstream.yml) 每天 UTC 18:30（北京时间 02:30）
+把上游新提交合并进来，并在合并成功后发布镜像。
+
+### 一次同步会做什么
+
+1. 拉取上游分支，用 `git merge --no-ff` 合并到 `smart_core`；
+2. 冲突文件按 [.github/sync/keep-local.txt](../.github/sync/keep-local.txt) 处理：
+   本分支独有的文件（`Dockerfile`、`docker-compose.yml`、`docs/docker.md`、`.github/**` 等）
+   直接保留本地版本，`pnpm-lock.yaml` 取上游版本后用 `pnpm install --lockfile-only` 重新生成；
+3. 仍有没解决的冲突 → 把合并结果推到 `sync/upstream` 分支，开一条**草稿** PR，
+   冲突标记原样保留，`smart_core` 与镜像都不动；
+4. 没有冲突 → 安装依赖并跑 `format:check` / `lint:check` / `typecheck`；
+5. 全部通过 → 推送 `smart_core`，显式触发 [Docker](../.github/workflows/docker.yml) 构建并推送到 GHCR，
+   镜像额外带 `upstream-<版本>-<上游短哈希>` 标签，例如 `upstream-2.0.4-acae711`。
+
+推送用的是 `GITHUB_TOKEN`，按 GitHub 的规则不会连带触发 `docker.yml`，所以镜像是另外
+`workflow_dispatch` 出去的，一次同步只会构建一次。
+
+### 手动触发
+
+Actions → **Sync Upstream** → _Run workflow_：
+
+| 输入                  | 说明                                                 |
+| --------------------- | ---------------------------------------------------- |
+| `apply`               | 取消勾选只做预演：报告哪些文件会冲突，不改动任何分支 |
+| `publish`             | 合并成功后是否触发镜像构建                           |
+| `upstream_repository` | 上游仓库，默认 `mihomo-party-org/clash-party`        |
+| `upstream_branch`     | 上游分支，默认 `smart_core`                          |
+
+定时任务固定真写，`apply` 只对手动触发生效。
+
+### 本地预演
+
+```bash
+node scripts/sync-upstream.mjs            # 只报告，结束后工作区恢复原样
+node scripts/sync-upstream.mjs --apply    # 真的合并（需要本地 git 提交身份）
+```
+
+脚本和 workflow 走的是同一套逻辑：拉上游、合并、按 keep-local 处理冲突、重新生成锁文件。
+本地没配 `user.name` / `user.email` 时，预演会用临时身份，不会产生提交。
+
+### 出现冲突时
+
+草稿 PR 里的冲突标记不能直接合并。按 PR 正文里的命令拉分支、解决冲突、执行 `pnpm install`
+后再跑一遍三项检查，推回分支并去掉草稿状态即可合并；合并到 `smart_core` 会照常触发镜像构建。
+
+同一时间只会有一条待处理的 `sync/upstream` PR：已存在草稿 PR 时，新的同步只在 PR 里追加评论，
+不会覆盖正在解决的分支。
+
 ## 从源码构建
 
 ```bash

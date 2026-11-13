@@ -17,6 +17,11 @@ on:
       - smart_core
       - main
   workflow_dispatch:
+    inputs:
+      extra_tag:
+        description: 额外镜像标签（Sync Upstream 同步上游时填入，例如 upstream-2.0.4-acae711）
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -78,6 +83,8 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha,format=short
             type=raw,value=latest,enable={{is_default_branch}}
+            # 上游同步触发的构建带一个可回溯的标签，只有 workflow_dispatch 且传了值时才生成
+            type=raw,value=${{ inputs.extra_tag }},enable=${{ github.event_name == 'workflow_dispatch' && inputs.extra_tag != '' }}
 
       # 多架构构建：TARGETARCH 由 buildx 按平台自动注入，prepare.mjs 据此下载对应架构内核
       - name: Build and push
