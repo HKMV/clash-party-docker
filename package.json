@@ -1,6 +1,6 @@
 {
   "name": "mihomo-party",
-  "version": "2.0.4",
+  "version": "2.0.5",
   "description": "Clash Party",
   "type": "module",
   "main": "./out/main/index.js",
@@ -61,9 +61,15 @@
     "i18next": "^26.7.2",
     "iconv-lite": "^0.7.3",
     "js-yaml": "^5.5.0",
+    "jsonc-parser": "^3.3.1",
     "plist": "^5.1.1",
     "qrcode.react": "^4.2.0",
+<<<<<<< HEAD
     "sysproxy-rs": "file:src/native/sysproxy",
+=======
+    "sysproxy-rs": "file:src\\native\\sysproxy",
+    "toml-eslint-parser": "^0.10.1",
+>>>>>>> upstream/smart_core
     "validator": "^13.15.35",
     "webdav": "^5.11.0",
     "ws": "^8.23.0",

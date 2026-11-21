@@ -571,13 +571,14 @@ const Profiles: React.FC = () => {
             {sortedItems.map((item) => (
               <ProfileItem
                 key={item.id}
-                isCurrent={item.id === current && !localSourceIds.has(item.id)}
+                isCurrent={item.id === current}
                 isSource={localSourceIds.has(item.id)}
                 addProfileItem={addProfileItem}
                 removeProfileItem={removeProfileItem}
                 mutateProfileConfig={mutateProfileConfig}
                 updateProfileItem={updateProfileItem}
                 info={item}
+<<<<<<< HEAD
                 onPress={
                   localSourceIds.has(item.id)
                     ? async () => {
@@ -588,6 +589,11 @@ const Profiles: React.FC = () => {
                         await changeCurrentProfile(item.id)
                       }
                 }
+=======
+                onPress={async () => {
+                  await changeCurrentProfile(item.id)
+                }}
+>>>>>>> upstream/smart_core
               />
             ))}
           </SortableContext>

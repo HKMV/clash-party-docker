@@ -56,6 +56,7 @@ const Actions: React.FC = () => {
             {t('actions.guide.button')}
           </Button>
         </SettingItem>
+<<<<<<< HEAD
         {/* 应用内更新下载的是桌面安装包，容器里应该 docker pull；轻量模式与退出
             则会停掉/杀死整个服务进程，都不能在 Web 模式下出现 */}
         {!isWebMode && (
@@ -76,6 +77,20 @@ const Actions: React.FC = () => {
                       setChangelog(version.changelog)
                       setOpenUpdate(true)
                     }
+=======
+        <SettingItem title={t('actions.update.title')} divider>
+          <Button
+            size="sm"
+            isLoading={checkingUpdate}
+            onPress={async () => {
+              try {
+                setCheckingUpdate(true)
+                const version = await checkUpdate()
+                if (version) {
+                  const canSilentlyUpdate = platform === 'win32' || platform === 'darwin'
+                  if (appConfig?.silentUpdate === true && canSilentlyUpdate) {
+                    await downloadAndInstallUpdate(version.version)
+>>>>>>> upstream/smart_core
                   } else {
                     new window.Notification(t('actions.update.upToDate.title'), {
                       body: t('actions.update.upToDate.body')
